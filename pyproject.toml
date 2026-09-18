@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sentinel-agent"
 version = "0.1.0"
-description = "SOC investigation agent. Milestone 3 looks up indicators with a closed tool set."
+description = "SOC investigation agent. Milestone 4 runs a bounded investigation and stops at VERIFYING."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }

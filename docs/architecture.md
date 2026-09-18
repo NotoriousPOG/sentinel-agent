@@ -1,6 +1,6 @@
 # Sentinel Agent architecture
 
-Sentinel Agent investigates a single security alert and produces a structured incident report for a human analyst. This document records the control-plane decisions for that pipeline and the tradeoffs behind them. It describes the system we are building. Milestone 1 shipped typed contracts, configuration, a FastAPI skeleton, and database wiring. Milestone 2 stores a normalized alert. Milestone 3 adds the closed tool registry and the five lookups. The agent loop and the report generator do not exist yet.
+Sentinel Agent investigates a single security alert and produces a structured incident report for a human analyst. This document records the control-plane decisions for that pipeline and the tradeoffs behind them. It describes the system we are building. Milestone 1 shipped typed contracts, configuration, a FastAPI skeleton, and database wiring. Milestone 2 stores a normalized alert. Milestone 3 adds the closed tool registry and the five lookups. Milestone 4 runs the investigation executor and stops at `VERIFYING` or `FAILED`. It does not write a report or record an analyst review.
 
 The pipeline, once later milestones land, is:
 
@@ -26,7 +26,7 @@ The investigation controller is a handwritten state machine over a closed status
 
 LangGraph is a reasonable fit when the graph is large, branches are data-dependent, and the team wants the framework's checkpointer and studio. Sentinel's control flow is the opposite: seven statuses, one bounded cycle (retry), and a hard requirement that every run ends. Putting that graph inside a framework would cost a LangChain-family dependency whose APIs move, and it would move the transition rules out of ordinary unit tests into a runtime we would have to boot to prove termination. A SOC control plane should be auditable by reading a table.
 
-The tradeoff is real. We do not get LangGraph's checkpoint UI, and milestone 4 has to write the executor ourselves. Persistence will be a row in PostgreSQL, not a framework checkpointer. If the graph later grows into open-ended planning with many specialist agents, revisiting a graph library is reasonable. The status enum and `transition()` function are the contract; the executor can be replaced without changing stored state. Until then the dependency is not worth it. LangGraph is not installed.
+The tradeoff is real. We do not get LangGraph's checkpoint UI, and the executor is ordinary Python in `agents/executor.py`. Persistence is a row in PostgreSQL, not a framework checkpointer. If the graph later grows into open-ended planning with many specialist agents, revisiting a graph library is reasonable. The status enum and `transition()` function are the contract; the executor can be replaced without changing stored state. Until then the dependency is not worth it. LangGraph is not installed.
 
 ### Why investigation state is explicit
 
@@ -43,7 +43,7 @@ Implicit agent state (a message list plus "the model will stop") cannot be teste
 
 `COMPLETE` is not "the model finished." It means an analyst approved the conclusion. A report can sit in `AWAITING_REVIEW` indefinitely; that wait is not an agent loop and does not consume tool budget.
 
-Counters on the state (`retries`, `tool_calls_made`, `tokens_used`, `deadline_at`) are part of the state, not ambient globals. Milestone 4's executor must call the predicates in `agents/budgets.py` before every model or tool call. The predicates are implemented and tested now so the termination rules are not prose that a later change can quietly ignore.
+Counters on the state (`retries`, `tool_calls_made`, `tokens_used`, `deadline_at`) are part of the state, not ambient globals. The executor calls the predicates in `agents/budgets.py` before every model call and before every tool call.
 
 ## Termination
 
@@ -51,7 +51,7 @@ Counters on the state (`retries`, `tool_calls_made`, `tokens_used`, `deadline_at
 
 That is a finite graph plus monotone counters. It is not a probabilistic stopping policy. Defaults (overridable by environment, never hardcoded in call sites) are 8 tool calls, 2 investigation retries, 1 schema-repair attempt, 120 seconds, and 24,000 tokens. Eight tool calls is deliberately small: a single alert with the five planned tools fits, and a larger cap mostly buys cost and a longer prompt-injection window. The cost is that a wide incident will end `INCONCLUSIVE` or `FAILED` instead of being "thorough." That is the right failure mode.
 
-The executor itself is milestone 4. Shipping the guards without the loop is intentional. A loop without guards would be the dangerous order.
+The executor calls `transition()` for every status change. It does not keep a second graph. `COMPLETE` is not produced here. A model that finishes, or that spends `max_tool_calls` after collecting evidence, stops at `VERIFYING`. Schema repair is capped by `max_repair_attempts` and then `FAILED`, and no `IncidentReport` is built. A provider or LLM transport error is `FAILED` without incrementing `retries`. Backoff is not implemented.
 
 ## Tool calls
 
@@ -63,7 +63,7 @@ The call path is:
 2. `ToolRegistry` maps the name to one of the five tools. Unknown names raise `UnknownTool`. There is no default and no shell tool.
 3. The implementation calls a threat-intel provider. Vendor HTTP stays behind `HttpTransport`.
 4. The output model is validated. The provider's original JSON is kept on `raw` and is untrusted data. Secrets are redacted before that copy is stored.
-5. `tool_call_key(name, arguments)` is a SHA-256 of canonical JSON. The registry keeps an in-process map from that key to the first result. A repeat returns the stored result and does not call the provider. The map is not the investigation state's `seen_tool_calls` list. Milestone 4 still has to record the key on the state. The cache dies with the process; Redis is still not used.
+5. `tool_call_key(name, arguments)` is a SHA-256 of canonical JSON. The registry keeps an in-process map from that key to the first result. A repeat returns the stored result and does not call the provider. The executor also records the key on `seen_tool_calls`. If the model asks for a key already on the state, the registry answers from cache and the loop stops, so a repeat cannot spin. The map is not the investigation state's list. The cache dies with the process; Redis is still not used.
 
 There is no `exec`, no `run_shell`, and no `fetch_url` tool. URLs that appear in alerts or provider payloads are stored as strings. Provider clients build URLs from host constants in `services/http.py` (`api.abuseipdb.com`, `www.virustotal.com`, `api.osv.dev`). The transport rejects any other scheme, host, port, or path, and it sets a timeout. It does not follow redirects. Alert text and tool arguments are not interpolated into those hosts.
 
@@ -104,11 +104,11 @@ complete_structured(messages, response_model: type[T]) -> T
 
 No SDK implements it in this release. When one does, it must return an instance of `response_model` or raise. A dict "we'll validate later" is not an acceptable implementation.
 
-If validation fails at runtime (milestone 4):
+If validation fails:
 
-1. Persist the failure (status stays non-terminal, error string set, raw model text stored as data, not replayed into the system prompt as instructions).
-2. One repair turn. The repair prompt includes the validator's error, which is our text, and the previous output inside the untrusted-data delimiters.
-3. Second failure moves the investigation to `FAILED`. No partial report is promoted to `IncidentReport`.
+1. The failure is stored on the state (status stays `INVESTIGATING`, error string set, raw model text stored as data).
+2. One repair turn by default. The repair message includes the validator's error, which is our text, and the previous output inside the untrusted-data delimiters. The system prompt is not rewritten.
+3. A second failure moves the investigation to `FAILED`. No partial report is promoted to `IncidentReport`. Unknown tool names and invalid arguments use this same repair budget. They are not provider retries.
 
 `max_repair_attempts` defaults to 1. More repairs mostly re-expose the model to the same untrusted alert.
 
@@ -158,9 +158,9 @@ There is no remediation executor, no playbook runner, and no endpoint that appli
 
 ## Provider abstraction
 
-Two ports. The LLM port still has no implementation. Threat-intel clients are behind the second port:
+Two ports. Threat-intel clients are behind the second. The LLM port is `LlmProvider` in `services/llm.py`, implemented by `OpenAiCompatibleClient` in `services/llm_http.py`.
 
-- `LlmProvider` in `services/llm.py`. An OpenAI-compatible HTTP client is the likely first implementation. The OpenAI SDK is not a dependency. The port does not need it, and adding it now would suggest a live client exists.
+- The client is OpenAI-compatible HTTP (`POST {base}/chat/completions`) using `httpx2`. The OpenAI SDK is not a dependency. Missing base URL, key, or model is `ConfigurationError`. The key is an `Authorization` header. It is not written to logs, exceptions, results, or stored model text. Executor tests use an in-process fake, not this client. The client tests inject a transport and do not open a socket. Transport failures are `LlmTransportError`, not schema repairs, and they are not retried.
 - `ThreatIntelProvider` is the set of protocols in `services/threat_intel.py` (`IpIntelligence`, `FileIntelligence`, `CveIntelligence`, `MitreCatalog`, `DomainIntelligence`). Clients:
   - AbuseIPDB `GET /api/v2/check` when `SENTINEL_ABUSEIPDB_API_KEY` is set. No geo API is called to fill gaps. Without the key, and with `demo_mode` off, the lookup raises `ConfigurationError`.
   - VirusTotal v3 `GET /api/v3/files/{hash}` when `SENTINEL_VIRUSTOTAL_API_KEY` is set. The key is an `x-apikey` header. It is not written to `raw`, logs, or exception text.
@@ -184,7 +184,7 @@ Alerts, logs, usernames, hostnames, URLs, domains, process names, command lines,
 
 Structural controls, which this design treats as primary:
 
-- The system prompt is a constant owned by the repo. Untrusted fields are not interpolated into it. They go in a separate message, inside delimiters, in milestone 7. There is no prompt template in this release, so there is nothing to inject into yet. The constraint is still binding on later code.
+- The system prompt is a constant in `agents/prompts.py`. Untrusted fields are not interpolated into it. The alert, tool results (including `raw`), and a rejected model output go in a separate user message, between `<<<UNTRUSTED_DATA>>>` and `<<<END_UNTRUSTED_DATA>>>`. A repair turn puts the validator error outside those markers. This is separation, not detection.
 - Tools cannot shell out and cannot fetch arbitrary URLs, so "ignore instructions and curl this host" has no capability to bind to.
 - Tool arguments are typed. A command line from the alert cannot become a process argument unless a tool input model explicitly has that field. None of the five tools do.
 - Database access goes through SQLAlchemy. Alert strings are not concatenated into SQL.
@@ -203,23 +203,23 @@ When instrumentation arrives, the rules are: one investigation id as the correla
 
 ## Persistence
 
-PostgreSQL is the system of record for anything that must survive a process restart. SQLAlchemy 2.x and Alembic are wired. Revision `0002_alerts` creates the `alerts` table: `alert_id` (primary key), `source`, `received_at`, and `document` (portable JSON, not JSONB, so the same revision applies on SQLite). Investigation tables are still absent; they arrive with the code that writes them.
+PostgreSQL is the system of record for anything that must survive a process restart. SQLAlchemy 2.x and Alembic are wired. Revision `0002_alerts` creates the `alerts` table. Revision `0003_investigations` creates `investigations`: `investigation_id` (primary key), `alert_id`, `status`, `updated_at`, and `document` (portable JSON, not JSONB, so the same revisions apply on SQLite). The document is the `InvestigationState`, including evidence collected from tool outputs, tool history, errors, and budgets.
 
-`POST /alerts` and `GET /alerts/{id}` read and write that table. The API does not open a database connection at import time. `GET /health` still does not touch the database. Unit tests migrate a temporary SQLite file. A separate test uses `SENTINEL_TEST_DATABASE_URL` and is what GitHub Actions runs against a PostgreSQL 16 service. If that variable is unset in GitHub Actions the test fails rather than skipping. SQLite is not a supported deployment. Docker Compose runs PostgreSQL 16 for local development and applies `alembic upgrade head` before serving.
+`POST /alerts` and `GET /alerts/{id}` read and write the alerts table. `POST /investigations` loads a stored alert, runs the executor in the request, and writes the investigations table. `GET /investigations/{id}` and `GET /investigations/{id}/evidence` read it back. The evidence route does not correlate or verify. Report and review stay 501. The API does not open a database connection at import time. `GET /health` still does not touch the database. Unit tests migrate a temporary SQLite file. A separate test uses `SENTINEL_TEST_DATABASE_URL` and is what GitHub Actions runs against a PostgreSQL 16 service. If that variable is unset in GitHub Actions the test fails rather than skipping. SQLite is not a supported deployment. Docker Compose runs PostgreSQL 16 for local development and applies `alembic upgrade head` before serving.
 
 Alembic lives at the repository root (`alembic.ini`, `alembic/`) rather than under `src/sentinel/storage/`. That is the layout Alembic's own documentation and `alembic upgrade` assume. Moving it inside the package would require a custom `script_location` and would mix migration scripts with importable application code. The ORM base class stays in `src/sentinel/models/`.
 
-Pydantic models live in `schemas/`. SQLAlchemy models will live in `models/`. Sharing one module for both has been a consistent source of import cycles and of API models growing database columns they should not expose.
+Pydantic models live in `schemas/`. SQLAlchemy models live in `models/`. Sharing one module for both has been a consistent source of import cycles and of API models growing database columns they should not expose.
 
 ## Configuration
 
-`pydantic-settings` loads `SENTINEL_*` environment variables. Secrets use `SecretStr`. The API key is not read by any client. `.env.example` contains placeholders. Docker Compose uses a local database password for a local database; it is not a production secret and it is not reused as a default inside Python. The application default database URL is a local SQLite file so `pytest` and a casual import do not attempt to authenticate to PostgreSQL.
+`pydantic-settings` loads `SENTINEL_*` environment variables. Secrets use `SecretStr`. A client reads a secret only to build a request header and must not copy it into a result, a log line, or an exception. `.env.example` contains placeholders. Docker Compose uses a local database password for a local database; it is not a production secret and it is not reused as a default inside Python. The application default database URL is a local SQLite file so `pytest` and a casual import do not attempt to authenticate to PostgreSQL.
 
 `SENTINEL_DEMO_MODE` selects mock IP and hash providers when `build_registry` runs. Loading settings, `GET /health`, and `POST /alerts` do not call a provider. The flag does not start an investigation.
 
 ## Intentionally deferred
 
-**Redis.** There is no queue. A single investigation is a short state machine with a hard timeout, and milestone 4 can run it as an in-process task. Redis becomes justified when more than one API replica must share a work queue or a tool-result cache. Adding it now means another service in Compose, a client library, and a cache that can serve stale or attacker-influenced tool output before we have a cache policy. The registry cache is per process only. `tool_call_key` itself is still a pure function.
+**Redis.** There is no queue. A single investigation is a short state machine with a hard timeout, and the executor runs it in the request process. Redis becomes justified when more than one API replica must share a work queue or a tool-result cache. Adding it now means another service in Compose, a client library, and a cache that can serve stale or attacker-influenced tool output before we have a cache policy. The registry cache is per process only. `tool_call_key` itself is still a pure function.
 
 **pgvector.** Evidence is retrieved by primary key and by investigation id, not by similarity. Semantic search over past incidents would pull other customers' or other analysts' untrusted text into the prompt, which is a prompt-injection path, and it requires an extension the local Postgres image does not need. Relational citations are the grounding model. Vectors can wait until that model works and a real retrieval eval exists.
 
@@ -235,4 +235,10 @@ Wazuh and generic JSON normalization, stable validation error codes, the `alerts
 
 ## What milestone 3 adds
 
-`ToolRegistry` and the five tools: `lookup_ip`, `lookup_hash`, `lookup_cve`, `search_mitre`, `lookup_domain`. AbuseIPDB and VirusTotal run only when their keys are set. OSV, the local ATT&CK subset, and DNS do not need keys. `demo_mode` selects labeled mocks for IP and hash only. There is still no agent loop, no report generator, no review storage, no eval runner, no tracing, and no remediation executor. `POST /investigations` is still 501.
+`ToolRegistry` and the five tools: `lookup_ip`, `lookup_hash`, `lookup_cve`, `search_mitre`, `lookup_domain`. AbuseIPDB and VirusTotal run only when their keys are set. OSV, the local ATT&CK subset, and DNS do not need keys. `demo_mode` selects labeled mocks for IP and hash only. Milestone 3 did not run an agent loop. That is milestone 4.
+
+## What milestone 4 adds
+
+`run_investigation` takes an `InvestigationState`, the stored alert, an `LlmProvider`, and a `ToolRegistry`. It moves `RECEIVED` to `VALIDATING` to `INVESTIGATING` through `transition()`, then calls the model. Tool calls go through the registry. The loop stops at `VERIFYING` when the model finishes, when the tool budget is spent and evidence was collected, or when the model repeats a tool key. It stops at `FAILED` when repair attempts are exhausted, the deadline or token budget is spent, or a provider or the model endpoint fails transport. It does not enter `AWAITING_REVIEW` or `COMPLETE`.
+
+The system prompt is a constant. Alert text and tool results sit in a separate message inside untrusted-data markers. That is separation, not a detector. `POST /investigations` runs this function for an already stored alert and persists the state. `GET /investigations/{id}/evidence` returns those records and does not correlate them. Report generation, review storage, evals, tracing, and remediation are still absent. `POST /investigations/{id}/review` is still 501.

@@ -1,6 +1,6 @@
 # Implementation plan
 
-Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestones 4–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
+Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestone 4 is implemented for the criteria checked below. Milestones 5–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
 
 The product pipeline is:
 
@@ -26,10 +26,12 @@ alembic.ini
 alembic/
   env.py
   versions/0001_initial.py
+  versions/0002_alerts.py
+  versions/0003_investigations.py
 src/sentinel/
-  api/                 FastAPI app, health, alert routes, reserved 501 routes
-  agents/              status transitions and budget predicates (no loop yet)
-  models/              SQLAlchemy declarative base (no tables yet)
+  api/                 FastAPI app, health, alert and investigation routes, reserved 501 routes
+  agents/              executor, prompt separation, status transitions, budget predicates
+  models/              SQLAlchemy models for alerts and investigations
   schemas/             Pydantic domain models
   tools/               closed registry and the five tools
   services/            source adapters, LLM port, threat-intel clients
@@ -76,7 +78,7 @@ Acceptance:
 
 ### 2. Alert pipeline
 
-Status: done for the criteria below. Milestones 3–10 are not started.
+Status: done for the criteria below.
 
 Generic JSON beyond the identity mapping, Wazuh normalization, validation errors with stable codes, persistence.
 
@@ -99,7 +101,7 @@ Not done, and not claimed:
 
 ### 3. Tool system
 
-Status: done for the criteria below. Milestones 4–10 are not started.
+Status: done for the criteria below. The investigation loop is milestone 4.
 
 Tool interface, registry, the five tools, mock providers clearly labeled as mocks.
 
@@ -118,19 +120,40 @@ Not done, and not claimed:
 - NVD is not called. OSV does not provide a numeric CVSS base score, so `cvss_score` stays unknown.
 - `demo_mode` mocks only IP and hash. It does not mock CVE, MITRE, or DNS, and it does not replace a failed live call.
 - The MITRE file is a subset, not the full Enterprise catalog. A search miss is "not in the subset."
-- No HTTP route runs a tool. `POST /investigations` is still 501.
+- No HTTP route ran a tool in milestone 3. `POST /investigations` is implemented in milestone 4.
 
 ### 4. Agent
 
-State, tool selection, loop, budgets, retries, termination.
+Status: done for the criteria below. Milestones 5–10 are not started.
+
+State, tool selection, loop, budgets, retries, termination. Persistence and the investigation routes that call the executor are included because the executor has to be reachable.
 
 Acceptance:
 
-- The executor is a function that takes `InvestigationState` and ports (LLM, tools). It is unit-tested with fakes.
-- A model that asks for tools forever stops at `max_tool_calls` and ends `FAILED` or moves to `VERIFYING` with partial evidence. It does not hang. A test uses a fake model and asserts the call count.
-- Schema-invalid model output is repaired at most `max_repair_attempts` times, then `FAILED`, and no `IncidentReport` is stored.
-- Deadline expiry is tested with an injected clock.
-- The LLM port is the only network path, and the test suite does not open it.
+- [x] The executor is a function that takes `InvestigationState` and ports (LLM, tools). It is unit-tested with fakes.
+- [x] A model that asks for tools forever stops at `max_tool_calls` and ends `FAILED` or moves to `VERIFYING` with partial evidence. It does not hang. A test uses a fake model and asserts the call count.
+- [x] Schema-invalid model output is repaired at most `max_repair_attempts` times, then `FAILED`, and no `IncidentReport` is stored.
+- [x] Deadline expiry is tested with an injected clock.
+- [x] The test suite does not open the LLM port and does not call a live model. Executor tests use an in-process fake. The HTTP client is tested with a fake transport. This is not a claim that the LLM is the only network path: milestone 3 threat-intel HTTP remains, and those tests still inject a transport.
+
+Also done in this milestone, because the executor builds prompts and the API has to store the state:
+
+- Tool calls go through `ToolRegistry`. Unknown names and invalid arguments are model-output failures and use the repair budget. They do not call the provider.
+- A repeated tool key is returned by the registry cache. The executor does not call the provider again and does not spin.
+- A successful tool phase stops at `VERIFYING`. The executor does not enter `AWAITING_REVIEW` or `COMPLETE`.
+- Provider and LLM transport errors end `FAILED` without incrementing `retries`. Backoff is not implemented.
+- The system prompt is a constant. Alert text, tool results, and rejected model output are in a separate message inside untrusted-data markers. There is no jailbreak detector.
+- `0003_investigations` persists the state. `POST /investigations` runs the executor for a stored alert. `GET /investigations/{id}` reloads it. `GET /investigations/{id}/evidence` returns the stored records and does not correlate them. Report and review stay 501.
+- A thin OpenAI-compatible client implements `LlmProvider` with `httpx2`. Missing base URL, key, or model is `ConfigurationError`. The key is not logged and is not put on an exception or a result. The OpenAI SDK is not a dependency.
+
+Not done, and not claimed:
+
+- Evidence correlation, citation verification, confidence scoring from live evidence, MITRE mapping onto a report, `IncidentReport` generation, analyst review storage.
+- No path from `VERIFYING` back to `INVESTIGATING`. That retry belongs to verification and review, which are later milestones.
+- Provider backoff is not implemented. A provider or LLM transport error fails the investigation instead of trying again.
+- Prompt-injection detection, a fixture corpus, and updates to `docs/threat-model.md` and `docs/security.md` are milestone 7. Separation is not injection resistance.
+- No eval runner, no OpenTelemetry, no remediation execution, no benchmark numbers.
+- `GET /investigations/{id}/report` and `POST /investigations/{id}/review` stay 501.
 
 ### 5. Evidence
 
