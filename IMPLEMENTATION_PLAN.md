@@ -1,6 +1,6 @@
 # Implementation plan
 
-Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestone 4 is implemented for the criteria checked below. Milestone 5 is implemented for the criteria checked below. Milestones 6–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
+Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestone 4 is implemented for the criteria checked below. Milestone 5 is implemented for the criteria checked below. Milestone 6 is implemented for the criteria checked below. Milestones 7–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
 
 The product pipeline is:
 
@@ -191,12 +191,29 @@ Not done, and not claimed:
 
 Structured reports, confidence scoring, MITRE mapping, human review persistence.
 
-Acceptance:
+- [x] The scorer sets `satisfied` from evidence and the formula in `docs/architecture.md`. A fixture with one low-reliability source scores 55, not 100. A score that is not the sum of satisfied weights still fails validation.
+- [x] MITRE techniques on the report must appear in a cited `search_mitre` result and in the checked-in Enterprise ATT&CK subset. Unknown technique ids fail. If `search_mitre` was not run, `mitre_attack` is empty.
+- [x] `POST /investigations/{id}/review` stores an `AnalystReview` and is the only path from `AWAITING_REVIEW` to `COMPLETE`. Approving the conclusion completes the investigation. Rejection stores the decision and moves to `FAILED`. It does not return to `INVESTIGATING`.
+- [x] Approving remediation writes the decision and does not invoke a side effect. A test spies on `execute_remediation` and asserts the symbol does not exist. No stub executor was added.
+- [x] `GET /investigations/{id}/report` returns the stored report only after `verify_report` has accepted it. With no verified report the route is 404 `report_not_found`.
 
-- The scorer sets `satisfied` from evidence and the formula in `docs/architecture.md`. A fixture with one low-reliability source cannot score 100.
-- MITRE techniques on the report are a subset of `search_mitre` results (or a local bundle), not free-typed technique ids the model invented. Unknown technique ids fail validation.
-- `POST /investigations/{id}/review` stores an `AnalystReview` and is the only path from `AWAITING_REVIEW` to `COMPLETE`.
-- Approving remediation writes the decision and does not invoke a side effect. A test spies on a forbidden executor symbol and asserts it does not exist.
+Also done:
+
+- The model may supply `executive_summary` and `analyst_notes`. The report system prompt is a constant. Alert text and evidence stay inside the existing untrusted-data markers. Schema failure uses `max_repair_attempts`, then `FAILED`. No partial report is stored.
+- `verify_report` runs before persist. A rejected report is not stored. The investigation ends `FAILED` with the verifier codes. `verify_report` was not weakened to make generation pass.
+- After a verified report is stored, `transition()` moves the state to `AWAITING_REVIEW`. The generator does not enter `COMPLETE`.
+- A run with no evidence can be `INCONCLUSIVE` when limitations are non-empty. The generator does not invent threat-intel facts.
+- Notes are required. Unknown review fields, including `execute` and `auto_remediate`, are rejected. `requires_human_approval` stays the literal `True`.
+
+Not done, and not claimed:
+
+- Report generation does not spend a retry by returning to `INVESTIGATING` when verification fails, even if retries remain. `apply_verification` is unchanged and still stays `VERIFYING` until retries are exhausted.
+- No jailbreak detector and no injection corpus. That is milestone 7.
+- No eval runner and no benchmark numbers. That is milestone 8.
+- OpenTelemetry is not installed. `GET /metrics` still returns 501. That is milestone 9.
+- No portfolio walkthrough, screenshots, or demo-alert polish. That is milestone 10. The README status table and the local run notes were updated to match this milestone.
+- No remediation executor, including a stub. Approving remediation does not isolate a host, block an IP, delete a file, or disable a user.
+- Provider backoff, Redis, pgvector, and the OpenAI SDK are still absent.
 
 ### 7. AI security
 

@@ -2,7 +2,7 @@
 
 Sentinel Agent is an early-stage SOC investigation system. It will accept a security alert, investigate it with a closed set of tools, and hand a structured report to a human analyst. Remediation, if it is ever added, will require an explicit human approval. This repository does not execute response actions.
 
-This repository stores normalized alerts, looks up indicators through a closed tool set, and runs a bounded investigation that stops at `VERIFYING` or `FAILED`. It links provider results to indicators without merging them, and it can reject a report that names an indicator or a fact the tools did not return. It does not ask a model to write an incident report, score confidence from live evidence, store an analyst review, or execute remediation. Read `docs/architecture.md` for the control-plane decisions and `IMPLEMENTATION_PLAN.md` for milestones 1–10.
+This repository stores normalized alerts, looks up indicators through a closed set of tools, and writes a verified incident report for a human to approve. Confidence is scored from stored evidence. MITRE techniques are copied only from `search_mitre` results that exist in the local Enterprise ATT&CK subset. Approving the conclusion completes the investigation. Approving remediation stores that decision and does not run it. Read `docs/architecture.md` for the control-plane decisions and `IMPLEMENTATION_PLAN.md` for milestones 1–10.
 
 ## Status
 
@@ -12,16 +12,20 @@ This repository stores normalized alerts, looks up indicators through a closed t
 | Domain schemas, confidence formula, transition guards | Present and tested |
 | `GET /health` and OpenAPI | Present |
 | `POST /alerts`, `GET /alerts/{id}` | Persist a normalized alert. Replaying the same `alert_id` returns the first stored copy |
-| `POST /investigations` | Creates a state for a stored `alert_id`, runs the executor synchronously, and returns that state. Stops at `VERIFYING` or `FAILED`. Does not approve a conclusion |
+| `POST /investigations` | Creates a state for a stored `alert_id`, runs the executor synchronously, and returns that state. A verified report ends at `AWAITING_REVIEW`. Otherwise the run is `FAILED`. Does not approve a conclusion |
 | `GET /investigations/{id}` | Reloads the stored state |
 | `GET /investigations/{id}/evidence` | Returns each stored row, the indicator links, and any contradiction links. Does not merge two providers into one result |
-| Report, review, and metrics routes | Reserved. They return 501 and do not store a report, store a review, or remediate |
+| `GET /investigations/{id}/report` | Returns the stored report after verification accepts it. `404 report_not_found` when no verified report is stored. Does not return a draft |
+| `POST /investigations/{id}/review` | Stores an `AnalystReview`. Approving the conclusion is the only path to `COMPLETE`. Rejection stores the decision and moves to `FAILED`. Approving remediation does not run an action |
+| `GET /metrics` | Reserved. Returns 501. No metrics payload |
 | LLM client | OpenAI-compatible HTTP client behind `LlmProvider`, using `httpx2`. No OpenAI SDK. Missing base URL, key, or model is a configuration error. The key is not logged. Tests use a fake transport or an in-process model |
-| Agent loop | Calls `transition()` and the budget predicates. Tool calls go through `ToolRegistry`. A tool phase ends at `VERIFYING`. `COMPLETE` is still only after analyst approval, which this release does not do |
-| Prompt separation | System prompt is a constant. Alert text, tool results, and rejected model output go in a separate message inside untrusted-data markers. Not a jailbreak detector |
+| Agent loop | Calls `transition()` and the budget predicates. Tool calls go through `ToolRegistry`. The tool phase ends at `VERIFYING`. A verified report then moves to `AWAITING_REVIEW`. `COMPLETE` happens only when an analyst approves the conclusion |
+| Prompt separation | System prompt is a constant. The report prompt is a separate constant. Alert text, tool results, evidence, and rejected model output go in a separate message inside untrusted-data markers. Not a jailbreak detector |
 | Evidence correlation | Present. Two provider rows for one indicator stay two rows. A disagreeing value is listed, not dropped |
-| Citation verification | Present as a pure function. It does not call a model. A pass stays `VERIFYING`. A failure becomes `FAILED` only when retries are already exhausted |
-| Report generation, confidence scoring, review storage | Not implemented |
+| Citation verification | Present as a pure function. It does not call a model and does not score confidence. The generator stores a report only when this function accepts it |
+| Confidence scoring | `weighted_evidence_v1`. `satisfied` is set from evidence. The model does not choose the percentage. One low-reliability source cannot score 100 |
+| MITRE on the report | Technique ids must appear in a cited `search_mitre` result and in the checked-in Enterprise subset. Unknown ids fail. No `search_mitre` row means `mitre_attack` is empty |
+| Remediation | Not implemented. No executor, including a stub. Approval of a recommendation is a stored field |
 | Generic JSON adapter | Maps a JSON object onto `NormalizedAlert`. Unknown keys stay on `raw_event` and `metadata` |
 | Wazuh | Normalizes the documented alert JSON cited in `tests/wazuh_fixtures.py`. Not a live manager client |
 | CrowdStrike, GuardDuty, Defender, Elastic, Splunk | Interfaces only. They raise |
@@ -54,7 +58,7 @@ Health: `GET /health`. Interactive API docs: `GET /docs`.
 
 `POST /alerts` takes `{"source": "generic_json" | "wazuh", "payload": { ... }}`. `source` defaults to `generic_json`. A validation failure is HTTP 422 with `missing_field`, `invalid_field`, `invalid_type`, or `unknown_source`. The response does not echo the submitted value. `GET /alerts/{id}` returns 404 with `alert_not_found` when the id was never stored.
 
-`POST /investigations` takes `{"alert_id": "..."}` for an alert that was already stored. It runs the executor in the request and returns the investigation state. A missing alert is 404 `alert_not_found`. A missing LLM base URL, key, or model is 503 `not_configured` and nothing is stored. `GET /investigations/{id}` reloads the state. `GET /investigations/{id}/evidence` returns each stored evidence row, indicator links, and contradiction links. It does not merge providers and it does not verify a report. `GET /investigations/{id}/report` and `POST /investigations/{id}/review` return 501.
+`POST /investigations` takes `{"alert_id": "..."}` for an alert that was already stored. It runs the executor in the request and returns the investigation state. A missing alert is 404 `alert_not_found`. A missing LLM base URL, key, or model is 503 `not_configured` and nothing is stored. `GET /investigations/{id}` reloads the state. `GET /investigations/{id}/evidence` returns each stored evidence row, indicator links, and contradiction links. It does not merge providers. `GET /investigations/{id}/report` returns the verified report, or 404 `report_not_found` when none has been stored. `POST /investigations/{id}/review` stores the analyst decision. Notes are required. `GET /metrics` returns 501.
 
 Run `alembic upgrade head` before posting alerts outside the test suite. The API process in Docker Compose does that on startup.
 

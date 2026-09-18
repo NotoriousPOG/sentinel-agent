@@ -1,6 +1,6 @@
 # Sentinel Agent architecture
 
-Sentinel Agent investigates a single security alert and produces a structured incident report for a human analyst. This document records the control-plane decisions for that pipeline and the tradeoffs behind them. It describes the system we are building. Milestone 1 shipped typed contracts, configuration, a FastAPI skeleton, and database wiring. Milestone 2 stores a normalized alert. Milestone 3 adds the closed tool registry and the five lookups. Milestone 4 runs the investigation executor and stops at `VERIFYING` or `FAILED`. It does not write a report or record an analyst review.
+Sentinel Agent investigates a single security alert and produces a structured incident report for a human analyst. This document records the control-plane decisions for that pipeline and the tradeoffs behind them. It describes the system we are building. Milestone 1 shipped typed contracts, configuration, a FastAPI skeleton, and database wiring. Milestone 2 stores a normalized alert. Milestone 3 adds the closed tool registry and the five lookups. Milestone 4 runs the investigation executor. Milestone 5 correlates evidence and verifies citations. Milestone 6 scores confidence, stores a verified report, and persists analyst review. It does not execute remediation.
 
 The pipeline, once later milestones land, is:
 
@@ -51,7 +51,7 @@ Counters on the state (`retries`, `tool_calls_made`, `tokens_used`, `deadline_at
 
 That is a finite graph plus monotone counters. It is not a probabilistic stopping policy. Defaults (overridable by environment, never hardcoded in call sites) are 8 tool calls, 2 investigation retries, 1 schema-repair attempt, 120 seconds, and 24,000 tokens. Eight tool calls is deliberately small: a single alert with the five planned tools fits, and a larger cap mostly buys cost and a longer prompt-injection window. The cost is that a wide incident will end `INCONCLUSIVE` or `FAILED` instead of being "thorough." That is the right failure mode.
 
-The executor calls `transition()` for every status change. It does not keep a second graph. `COMPLETE` is not produced here. A model that finishes, or that spends `max_tool_calls` after collecting evidence, stops at `VERIFYING`. Schema repair is capped by `max_repair_attempts` and then `FAILED`, and no `IncidentReport` is built. A provider or LLM transport error is `FAILED` without incrementing `retries`. Backoff is not implemented.
+The tool loop calls `transition()` for every status change inside it. It does not keep a second graph. A model that finishes, or that spends `max_tool_calls` after collecting evidence, stops that loop at `VERIFYING`. Schema repair during the tool loop is capped by `max_repair_attempts` and then `FAILED`, and no `IncidentReport` is built on that path. After `VERIFYING`, report generation may store a verified report and move to `AWAITING_REVIEW`. `COMPLETE` is still only from analyst approval. A provider or LLM transport error is `FAILED` without incrementing `retries`. Backoff is not implemented.
 
 ## Tool calls
 
@@ -92,7 +92,7 @@ Reliability is an enum (`high`, `medium`, `low`, `unknown`) set by `reliability_
 
 `reported_malicious` stays `None` unless a provider documents a boolean. AbuseIPDB's `abuseConfidenceScore` is not that boolean, and a score of 0 is not stored as "clean." OSV's `severity[].score` is a CVSS vector string, not a numeric base score, so `cvss_score` stays unknown. Computing a number from the vector would invent one. NVD is not called.
 
-These validators are necessary and not sufficient. They stop a report that cites nothing. They do not stop a report that cites a real evidence id and then misstates it. `verify_report` compares indicator names in the narrative, and fact statements, to alert fields and tool-output fields. It does not read `raw` for a verdict or a reliability label. The schema is the backstop, not the whole control. Confidence booleans are still milestone 6.
+These validators are necessary and not sufficient. They stop a report that cites nothing. They do not stop a report that cites a real evidence id and then misstates it. `verify_report` compares indicator names in the narrative, and fact statements, to alert fields and tool-output fields. It does not read `raw` for a verdict or a reliability label. The schema is the backstop, not the whole control. `score_confidence` sets the confidence booleans from evidence. The schema still checks the arithmetic.
 
 ## Structured output
 
@@ -142,9 +142,9 @@ Five factors, fixed weights, each either satisfied or not:
 
 `score` must equal the sum of the weights of satisfied factors. A payload with `score: 95` and factors that sum to 40 does not validate. Weights that differ from the table do not validate. Omitting a factor does not validate. Changing the weights requires a code change and a new `method` literal, so old reports stay interpretable.
 
-The boolean `satisfied` flags are still a judgment until milestone 6 wires them to evidence. The schema can only force the arithmetic and the citations. Positive factors other than `data_completeness` must cite evidence ids. `contradiction_penalty` must cite evidence when it is unsatisfied, and may cite nothing when no contradiction exists. That asymmetry is deliberate: you can show a contradiction; you cannot show a citation for an absence.
+`score_confidence` sets each `satisfied` flag from the table above. The model does not choose the percentage. Positive factors other than `data_completeness` must cite evidence ids. `contradiction_penalty` must cite evidence when it is unsatisfied, and may cite nothing when no contradiction exists. That asymmetry is deliberate: you can show a contradiction; you cannot show a citation for an absence. A satisfied `evidence_coverage` with no evidence id to cite is stored unsatisfied, because the schema forbids an uncited positive factor. Lookup-capable types are ip, domain, hash, and cve. URL has no lookup tool, so it counts only for `data_completeness`. Coverage is by indicator type: one `lookup_ip` covers the ip type.
 
-This model will under-score sparse alerts. Good. A single low-reliability hit should not read as "90% malicious."
+This model will under-score sparse alerts. Good. A single low-reliability hit should not read as "90% malicious." A fixture with one `mock:` source scores 55 when coverage, the contradiction penalty, and data completeness are the only factors met.
 
 ## Human review
 
@@ -154,7 +154,7 @@ This model will under-score sparse alerts. Good. A single low-reliability hit sh
 
 There is no remediation executor, no playbook runner, and no endpoint that applies an action. Approval persists a decision. It does not SSH, call a firewall, or isolate a host. If that capability is ever added, it has to be a separate process that refuses to run unless a stored review has `remediation=approve` for that specific action id. This repository does not contain that process, including as a stub that could be flipped on.
 
-`POST /investigations/{id}/review` returns 501. The model is real; the route is not.
+`POST /investigations/{id}/review` stores the `AnalystReview` on the investigation document. Approving the conclusion is the only path from `AWAITING_REVIEW` to `COMPLETE`. Rejection stores the decision and moves to `FAILED`. It does not return to `INVESTIGATING`. Approving or rejecting remediation changes no host, address, file, or account.
 
 ## Provider abstraction
 
@@ -205,7 +205,7 @@ When instrumentation arrives, the rules are: one investigation id as the correla
 
 PostgreSQL is the system of record for anything that must survive a process restart. SQLAlchemy 2.x and Alembic are wired. Revision `0002_alerts` creates the `alerts` table. Revision `0003_investigations` creates `investigations`: `investigation_id` (primary key), `alert_id`, `status`, `updated_at`, and `document` (portable JSON, not JSONB, so the same revisions apply on SQLite). The document is the `InvestigationState`, including evidence collected from tool outputs, tool history, errors, and budgets.
 
-`POST /alerts` and `GET /alerts/{id}` read and write the alerts table. `POST /investigations` loads a stored alert, runs the executor in the request, and writes the investigations table. `GET /investigations/{id}` and `GET /investigations/{id}/evidence` read it back. The evidence route returns each stored row plus indicator links and contradiction links. It does not merge providers and it does not verify a report. Report and review stay 501. The API does not open a database connection at import time. `GET /health` still does not touch the database. Unit tests migrate a temporary SQLite file. A separate test uses `SENTINEL_TEST_DATABASE_URL` and is what GitHub Actions runs against a PostgreSQL 16 service. If that variable is unset in GitHub Actions the test fails rather than skipping. SQLite is not a supported deployment. Docker Compose runs PostgreSQL 16 for local development and applies `alembic upgrade head` before serving.
+`POST /alerts` and `GET /alerts/{id}` read and write the alerts table. `POST /investigations` loads a stored alert, runs the executor in the request, and writes the investigations table. `GET /investigations/{id}` and `GET /investigations/{id}/evidence` read it back. The evidence route returns each stored row plus indicator links and contradiction links. It does not merge providers. The verified report and the analyst review are fields on the same investigation document. `GET /investigations/{id}/report` returns that report, or 404 when verification has not accepted one. `GET /metrics` stays 501. The API does not open a database connection at import time. `GET /health` still does not touch the database. Unit tests migrate a temporary SQLite file. A separate test uses `SENTINEL_TEST_DATABASE_URL` and is what GitHub Actions runs against a PostgreSQL 16 service. If that variable is unset in GitHub Actions the test fails rather than skipping. SQLite is not a supported deployment. Docker Compose runs PostgreSQL 16 for local development and applies `alembic upgrade head` before serving.
 
 Alembic lives at the repository root (`alembic.ini`, `alembic/`) rather than under `src/sentinel/storage/`. That is the layout Alembic's own documentation and `alembic upgrade` assume. Moving it inside the package would require a custom `script_location` and would mix migration scripts with importable application code. The ORM base class stays in `src/sentinel/models/`.
 
@@ -249,4 +249,14 @@ The system prompt is a constant. Alert text and tool results sit in a separate m
 
 `verify_report` checks a report object the caller built. It rejects an executive summary that names an indicator missing from the alert and from evidence, a citation that was not collected, a reliability value that disagrees with tool policy, a benign classification that no stored field supports, and a fact whose field or value is not in the tool output. Contradictions are returned on the result. They are not averaged. The function does not call a model and does not score confidence.
 
-The executor still stops at `VERIFYING`. `apply_verification` records the result on the state. A pass stays `VERIFYING`. A failure moves to `FAILED` through `transition()` only when `retries >= max_retries`. It does not enter `AWAITING_REVIEW` or `COMPLETE`, and it does not return to `INVESTIGATING`. `GET /investigations/{id}/evidence` returns the linked rows. Report and review routes stay 501.
+The executor still stops at `VERIFYING`. `apply_verification` records the result on the state. A pass stays `VERIFYING`. A failure moves to `FAILED` through `transition()` only when `retries >= max_retries`. It does not enter `AWAITING_REVIEW` or `COMPLETE`, and it does not return to `INVESTIGATING`. `GET /investigations/{id}/evidence` returns the linked rows. Report generation is milestone 6.
+
+## What milestone 6 adds
+
+`score_confidence` sets the five `weighted_evidence_v1` booleans from the alert and the collected rows. The score is the sum of the satisfied weights. The model is not asked for a percentage.
+
+`assemble_report` copies indicators, evidence ids, confidence, and MITRE refs from tool output. A technique id must be in a cited `search_mitre` result and in the checked-in Enterprise subset. Unknown ids fail. No `search_mitre` row leaves `mitre_attack` empty. The model may supply `executive_summary` and `analyst_notes` only. That system prompt is a constant. Alert text and evidence stay inside the untrusted-data markers.
+
+`finalize_investigation` validates the assembled `IncidentReport`. Schema failure uses `max_repair_attempts`, then `FAILED`. It calls `verify_report` before storing anything. A rejected report is not stored, and the investigation ends `FAILED` with the verifier codes. The verifier was not weakened. A verified report is stored, then `transition()` moves the state to `AWAITING_REVIEW`. The generator does not enter `COMPLETE`.
+
+`POST /investigations/{id}/review` persists an `AnalystReview`. Notes are required. Extra fields such as `execute` and `auto_remediate` fail validation. Approving the conclusion is the only path to `COMPLETE`. Rejection records the decision and moves to `FAILED`. It does not return to `INVESTIGATING`. Approving remediation writes the field and calls nothing else. There is no remediation executor. `GET /investigations/{id}/report` returns the stored verified report, or 404 when there is none. `GET /metrics` is still 501.
