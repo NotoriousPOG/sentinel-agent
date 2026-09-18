@@ -1,6 +1,6 @@
 # Implementation plan
 
-Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestone 1 is the only milestone implemented in the foundation branch. Later milestones are specified so the foundation does not paint them into a corner. Acceptance criteria are checks a reviewer can run or read, not slogans.
+Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestones 4–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
 
 The product pipeline is:
 
@@ -31,8 +31,8 @@ src/sentinel/
   agents/              status transitions and budget predicates (no loop yet)
   models/              SQLAlchemy declarative base (no tables yet)
   schemas/             Pydantic domain models
-  tools/               tool Protocol only
-  services/            source adapters, LLM port, TI port
+  tools/               closed registry and the five tools
+  services/            source adapters, LLM port, threat-intel clients
   storage/             engine and session factory
   observability/       package marker; instrumentation is milestone 9
   security/            untrusted-field registry (not a detector)
@@ -45,7 +45,7 @@ docs/
   threat-model.md      stub
   evaluations.md       stub
   security.md          stub
-  adding-tools.md      stub
+  adding-tools.md      how to add a tool without shell or arbitrary HTTP
 .github/workflows/test.yml
 .github/workflows/security.yml
 ```
@@ -99,15 +99,26 @@ Not done, and not claimed:
 
 ### 3. Tool system
 
+Status: done for the criteria below. Milestones 4–10 are not started.
+
 Tool interface, registry, the five tools, mock providers clearly labeled as mocks.
 
 Acceptance:
 
-- Each tool's input model rejects the wrong shape. The registry refuses unknown names.
-- Mock providers return canned data only when `demo_mode` is on, and every mock result is tagged `provider` starting with `mock:`. They are not importable as default.
-- Real provider clients (AbuseIPDB, VirusTotal, NVD/OSV, or a local MITRE STIX bundle) sit behind `ThreatIntelProvider`. Missing keys fail with a configuration error, not a fabricated verdict.
-- Duplicate `tool_call_key` does not call the provider twice in a unit test with a fake clock and a counting provider.
-- No tool accepts a shell command or an arbitrary URL fetch.
+- [x] Each tool's input model rejects the wrong shape. The registry refuses unknown names. There is no default tool and no shell tool.
+- [x] Mock providers return canned data only when `demo_mode` is on, and every mock result is tagged `provider` starting with `mock:`. `build_registry` does not select them when the flag is off.
+- [x] Real provider clients sit behind the protocols in `services/threat_intel.py`. AbuseIPDB and VirusTotal run only with their keys. OSV is the public CVE source. MITRE is a local Enterprise ATT&CK 19.2 subset. Missing keys raise `ConfigurationError`, not a fabricated verdict. A timeout or non-200 raises `ProviderError`.
+- [x] Duplicate `tool_call_key` does not call the provider twice. The unit test uses a fake clock and a counting provider.
+- [x] No tool accepts a shell command or an arbitrary URL fetch. Vendor HTTP hosts are constants, with a timeout.
+
+Not done, and not claimed:
+
+- No agent loop, no report generator, no review storage, no eval runner, no tracing, and no remediation executor.
+- Provider transport errors are not retried. Backoff is not implemented.
+- NVD is not called. OSV does not provide a numeric CVSS base score, so `cvss_score` stays unknown.
+- `demo_mode` mocks only IP and hash. It does not mock CVE, MITRE, or DNS, and it does not replace a failed live call.
+- The MITRE file is a subset, not the full Enterprise catalog. A search miss is "not in the subset."
+- No HTTP route runs a tool. `POST /investigations` is still 501.
 
 ### 4. Agent
 
@@ -205,6 +216,7 @@ Verified on 2026-09-18 with `pip index versions <name>` against PyPI. Versions b
 | `sqlalchemy` | 2.0.54 | Engine, sessions, future ORM. 2.x style only. |
 | `alembic` | 1.20.0 | Migrations. |
 | `psycopg[binary]` | `psycopg` 3.3.6, extra pulls `psycopg-binary` 3.3.6 | PostgreSQL driver for SQLAlchemy's `postgresql+psycopg` URL. The binary extra avoids compiling `libpq` in the image. |
+| `httpx2` | 2.13.0 | HTTP client for AbuseIPDB, VirusTotal, and OSV. Re-verified on PyPI on 2026-09-18. `httpx` 0.28.1 was current the same day and was not added; `httpx2` is the same-API fork Starlette 1.6's `TestClient` already imports. |
 
 `setuptools` 84.0.0 is the build backend only (`requires` in `[build-system]`), not an application dependency.
 
@@ -213,7 +225,7 @@ Verified on 2026-09-18 with `pip index versions <name>` against PyPI. Versions b
 | Package | Version verified | Why it is here |
 | --- | --- | --- |
 | `pytest` | 9.1.1 | Test runner. |
-| `httpx2` | 2.13.0 | Starlette 1.6's `TestClient` imports `httpx2` and treats `httpx` as a deprecated fallback. Dev-only. A runtime HTTP client waits for milestone 3, when a tool actually calls out. |
+| `httpx2` | 2.13.0 | Also listed under runtime. The dev extra keeps the pin because `TestClient` imports it. |
 | `ruff` | 0.16.8 | Lint and format in CI. |
 | `mypy` | 2.3.1 | Type check. Uses the `pydantic.mypy` plugin shipped inside `pydantic`, not a separate package. |
 | `bandit` | 1.9.4 | Static checks for obvious dangerous calls in `src/`. |
@@ -230,8 +242,8 @@ Verified on 2026-09-18 with `pip index versions <name>` against PyPI. Versions b
 | OpenTelemetry (`opentelemetry-api`, `opentelemetry-sdk`) | Milestone 9, and only with a default-off exporter. A no-op dependency is still a dependency. |
 | `prometheus-client` | Same milestone as `GET /metrics`. The route is 501 until then. |
 | `structlog` | stdlib logging is enough until milestone 9. |
-| `httpx` | The test client does not need it. Runtime HTTP is still milestone 3. |
-| Vendor SDKs (VirusTotal, and similar) | HTTP behind `ThreatIntelProvider` when a provider is implemented. No SDK by default. |
+| `httpx` | Not added. `httpx2` 2.13.0 is the HTTP client. |
+| Vendor SDKs (VirusTotal, and similar) | HTTP behind the threat-intel protocols. No SDK. |
 | `email-validator` | Not used. `EmailStr` is not a field. |
 
 ## Non-goals for this phase

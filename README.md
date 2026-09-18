@@ -2,7 +2,7 @@
 
 Sentinel Agent is an early-stage SOC investigation system. It will accept a security alert, investigate it with a closed set of tools, and hand a structured report to a human analyst. Remediation, if it is ever added, will require an explicit human approval. This repository does not execute response actions.
 
-This repository is the foundation plus alert ingestion. It does not investigate alerts. Read `docs/architecture.md` for the control-plane decisions and `IMPLEMENTATION_PLAN.md` for milestones 1–10.
+This repository stores normalized alerts and can look up indicators through a closed tool set. It does not run an investigation. Read `docs/architecture.md` for the control-plane decisions and `IMPLEMENTATION_PLAN.md` for milestones 1–10.
 
 ## Status
 
@@ -16,11 +16,17 @@ This repository is the foundation plus alert ingestion. It does not investigate 
 | Generic JSON adapter | Maps a JSON object onto `NormalizedAlert`. Unknown keys stay on `raw_event` and `metadata` |
 | Wazuh | Normalizes the documented alert JSON cited in `tests/wazuh_fixtures.py`. Not a live manager client |
 | CrowdStrike, GuardDuty, Defender, Elastic, Splunk | Interfaces only. They raise |
-| LLM and threat-intel clients | Interfaces only. No network calls. `demo_mode` does not invent results |
 | PostgreSQL | SQLAlchemy model and Alembic revision `0002_alerts`. Unit tests use SQLite. GitHub Actions runs the alert test against PostgreSQL |
-| Agent loop, tools, evidence correlation, report generation | Not implemented |
-| Prompt-injection runtime defenses, evals, tracing | Not implemented |
-| `demo_mode` | Flag only. No mock providers |
+| LLM client | Interface only. No network calls |
+| Threat-intel tools | Closed registry: `lookup_ip`, `lookup_hash`, `lookup_cve`, `search_mitre`, `lookup_domain`. Unknown names are refused. No shell or URL-fetch tool |
+| IP reputation | AbuseIPDB when `SENTINEL_ABUSEIPDB_API_KEY` is set. A missing key is a configuration error. No geo API |
+| File hash | VirusTotal v3 when `SENTINEL_VIRUSTOTAL_API_KEY` is set. The key is not copied into results or logs |
+| CVE | OSV `GET /v1/vulns/{id}`. Numeric CVSS is left unknown; OSV returns a vector, not a base score |
+| MITRE ATT&CK | Local subset of Enterprise 19.2. Source and retrieval date are in `src/sentinel/data/attack/README.md`. Not the full catalog |
+| DNS | Resolver with a timeout. Tests inject the resolver. The domain is not fetched over HTTP |
+| `demo_mode` | Selects mock IP and hash providers tagged `mock:`. Does not start an investigation, and does not replace a failed live call |
+| Agent loop, evidence correlation, report generation, review storage | Not implemented |
+| Prompt-injection runtime defenses, evals, tracing, remediation | Not implemented |
 
 There are no benchmark numbers because nothing has been measured.
 

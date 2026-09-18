@@ -1,6 +1,6 @@
 # Sentinel Agent architecture
 
-Sentinel Agent investigates a single security alert and produces a structured incident report for a human analyst. This document records the control-plane decisions for that pipeline and the tradeoffs behind them. It describes the system we are building. Milestone 1 shipped typed contracts, configuration, a FastAPI skeleton, and database wiring. Milestone 2 stores a normalized alert. The agent loop, tools, and report generator do not exist yet.
+Sentinel Agent investigates a single security alert and produces a structured incident report for a human analyst. This document records the control-plane decisions for that pipeline and the tradeoffs behind them. It describes the system we are building. Milestone 1 shipped typed contracts, configuration, a FastAPI skeleton, and database wiring. Milestone 2 stores a normalized alert. Milestone 3 adds the closed tool registry and the five lookups. The agent loop and the report generator do not exist yet.
 
 The pipeline, once later milestones land, is:
 
@@ -57,17 +57,17 @@ The executor itself is milestone 4. Shipping the guards without the loop is inte
 
 Tools are a closed enum: `lookup_ip`, `lookup_hash`, `lookup_cve`, `search_mitre`, `lookup_domain`. Each has its own input and output model (`extra=forbid`). The model may choose a name and a payload. It may not invent a tool, pass a shell string, or pass a URL to fetch.
 
-The call path, when milestone 3 and 4 exist, will be:
+The call path is:
 
 1. The model returns a tool name and arguments, validated by that tool's input model. Invalid arguments are a model-output failure, not a retry against the provider.
-2. A registry maps the name to an object. Unknown names are errors. There is no default.
-3. The implementation calls a threat-intel provider interface. Vendor SDKs stay behind that interface.
-4. The output model is validated. The provider's original JSON is kept on `raw` and is untrusted data.
-5. `tool_call_key(name, arguments)` is a SHA-256 of canonical JSON. A repeated key does not call the provider again; the existing evidence record is reused. The helper exists now; the cache does not.
+2. `ToolRegistry` maps the name to one of the five tools. Unknown names raise `UnknownTool`. There is no default and no shell tool.
+3. The implementation calls a threat-intel provider. Vendor HTTP stays behind `HttpTransport`.
+4. The output model is validated. The provider's original JSON is kept on `raw` and is untrusted data. Secrets are redacted before that copy is stored.
+5. `tool_call_key(name, arguments)` is a SHA-256 of canonical JSON. The registry keeps an in-process map from that key to the first result. A repeat returns the stored result and does not call the provider. The map is not the investigation state's `seen_tool_calls` list. Milestone 4 still has to record the key on the state. The cache dies with the process; Redis is still not used.
 
-There is no `exec`, no `run_shell`, and no `fetch_url` tool. URLs that appear in alerts or provider payloads are stored as strings. If a later milestone needs to retrieve a page, that tool must allowlist scheme and host. It will not take an arbitrary URL from the model or from alert text.
+There is no `exec`, no `run_shell`, and no `fetch_url` tool. URLs that appear in alerts or provider payloads are stored as strings. Provider clients build URLs from host constants in `services/http.py` (`api.abuseipdb.com`, `www.virustotal.com`, `api.osv.dev`). The transport rejects any other scheme, host, port, or path, and it sets a timeout. It does not follow redirects. Alert text and tool arguments are not interpolated into those hosts.
 
-httpx is not a runtime dependency. Starlette 1.6's `TestClient` asks for `httpx2` (verified 2.13.0) and only falls back to `httpx` with a deprecation warning, so the test extra installs `httpx2`. Tool HTTP, if it uses `httpx` or `httpx2`, waits for milestone 3 when a tool actually makes a call.
+`httpx2` 2.13.0 (verified again on PyPI on 2026-09-18; same release already pinned for tests) is the runtime HTTP client. It is a same-API fork of `httpx` 0.28.1, which is what Starlette 1.6 already imports. `httpx` itself is not installed. The client is constructed only when a registry is built without an injected transport. Tests inject a transport and do not open a socket.
 
 ## Evidence grounding
 
@@ -80,7 +80,17 @@ An evidence record is what a tool returned, plus who returned it, when, and whic
 - `INCONCLUSIVE` is allowed without supporting evidence, but `limitations` must be non-empty.
 - Every report carries at least one limitation. "No limitations" is not a valid document.
 
-Reliability is an enum (`high`, `medium`, `low`, `unknown`) set by tool policy, not by the model. The policy table is empty until real tools exist in milestone 3. Filling it with invented vendor scores would be fake threat intelligence.
+Reliability is an enum (`high`, `medium`, `low`, `unknown`) set by `reliability_for_provider` in `tools/policy.py`, not by the model and not by text in the provider body. The table is:
+
+| Provider | Reliability | Why |
+| --- | --- | --- |
+| `mock:*` | `low` | Synthetic. The name is the label. |
+| `abuseipdb`, `virustotal` | `medium` | One vendor. Counts and confidence scores are not copied into this field. |
+| `osv`, `mitre-attack` | `high` | Primary public record, or the official catalog subset. |
+| `dns` | `low` | A resolution is not a reputation verdict. |
+| anything else | `unknown` | Fail closed. |
+
+`reported_malicious` stays `None` unless a provider documents a boolean. AbuseIPDB's `abuseConfidenceScore` is not that boolean, and a score of 0 is not stored as "clean." OSV's `severity[].score` is a CVSS vector string, not a numeric base score, so `cvss_score` stays unknown. Computing a number from the vector would invent one. NVD is not called.
 
 These validators are necessary and not sufficient. They stop a report that cites nothing. They do not stop a report that cites a real evidence id and then misstates it. Comparing narrative claims to evidence fields is milestone 5. The schema is the backstop, not the whole control.
 
@@ -108,13 +118,13 @@ Three different retries are easy to conflate. They have separate budgets:
 
 | Failure | Budget | Counts as |
 | --- | --- | --- |
-| Transport error talking to a provider (timeout, 429, 5xx) | small per-call cap inside the tool, milestone 3 | not an investigation retry |
+| Transport error talking to a provider (timeout, 429, 5xx) | one attempt, then `ProviderError` | not an investigation retry |
 | Model output fails schema validation | `max_repair_attempts` | repair, then `FAILED` |
 | Verification or the analyst rejects the conclusion | `max_retries` on the state machine | the only cycle in the graph |
 
 Provider retries must not replay a non-idempotent remediation call. That constraint is easy to keep because no remediation call exists. Investigation retries re-enter `INVESTIGATING` with the evidence already collected; they do not wipe the record. Duplicate tool keys still apply, so a retry cannot multiply provider cost by repeating the same lookup.
 
-Backoff for provider transport errors will be exponential with jitter, capped, and will not treat an application-level "this IP is malicious" as a retryable error. Not implemented yet.
+A provider call is a single attempt. Timeout, non-200, and a body that is not the documented object become `ProviderError`. They are not retried and they are not turned into a mock result. Exponential backoff with jitter is still not implemented.
 
 ## Confidence
 
@@ -148,10 +158,17 @@ There is no remediation executor, no playbook runner, and no endpoint that appli
 
 ## Provider abstraction
 
-Two ports, no implementations:
+Two ports. The LLM port still has no implementation. Threat-intel clients are behind the second port:
 
 - `LlmProvider` in `services/llm.py`. An OpenAI-compatible HTTP client is the likely first implementation. The OpenAI SDK is not a dependency. The port does not need it, and adding it now would suggest a live client exists.
-- `ThreatIntelProvider` in `services/threat_intel.py`. AbuseIPDB, VirusTotal, NVD, and OSV are future adapters behind this port. Keys, if later configured, are `SecretStr` settings. They must not be logged, placed in `raw`, or copied onto a report. No provider key is read by any current code path beyond loading settings.
+- `ThreatIntelProvider` is the set of protocols in `services/threat_intel.py` (`IpIntelligence`, `FileIntelligence`, `CveIntelligence`, `MitreCatalog`, `DomainIntelligence`). Clients:
+  - AbuseIPDB `GET /api/v2/check` when `SENTINEL_ABUSEIPDB_API_KEY` is set. No geo API is called to fill gaps. Without the key, and with `demo_mode` off, the lookup raises `ConfigurationError`.
+  - VirusTotal v3 `GET /api/v3/files/{hash}` when `SENTINEL_VIRUSTOTAL_API_KEY` is set. The key is an `x-apikey` header. It is not written to `raw`, logs, or exception text.
+  - OSV `GET /v1/vulns/{id}` (public, no key). Reference URLs are stored and not fetched.
+  - A checked-in subset of Enterprise ATT&CK 19.2. See `src/sentinel/data/attack/README.md`. Search does not download the bundle.
+  - DNS via an injected resolver. The default uses `socket.getaddrinfo` with a timeout. It does not HTTP-fetch the domain.
+
+  `SENTINEL_DEMO_MODE` selects `mock:abuseipdb` and `mock:virustotal` before the call. It does not replace CVE, MITRE, or DNS, and it does not catch a live failure and return a mock. Mock `raw` payloads are marked synthetic. Keys, when configured, are `SecretStr`. No vendor SDK is installed.
 
 Source adapters are a third port. `GenericJsonAdapter` maps a JSON object onto `NormalizedAlert`. Keys that are not fields of that model are copied onto `raw_event` when the caller did not supply one, and listed under `metadata.unmapped_fields`. They are not promoted to first-class fields. `NormalizedAlert` itself still rejects unknown keys (`extra=forbid`); the split happens in the adapter, not by loosening the model.
 
@@ -198,15 +215,15 @@ Pydantic models live in `schemas/`. SQLAlchemy models will live in `models/`. Sh
 
 `pydantic-settings` loads `SENTINEL_*` environment variables. Secrets use `SecretStr`. The API key is not read by any client. `.env.example` contains placeholders. Docker Compose uses a local database password for a local database; it is not a production secret and it is not reused as a default inside Python. The application default database URL is a local SQLite file so `pytest` and a casual import do not attempt to authenticate to PostgreSQL.
 
-`SENTINEL_DEMO_MODE` is reserved. It changes no behavior. Mock threat-intel providers are not implemented, and turning the flag on must not be described as enabling a demo.
+`SENTINEL_DEMO_MODE` selects mock IP and hash providers when `build_registry` runs. Loading settings, `GET /health`, and `POST /alerts` do not call a provider. The flag does not start an investigation.
 
 ## Intentionally deferred
 
-**Redis.** There is no queue. A single investigation is a short state machine with a hard timeout, and milestone 4 can run it as an in-process task. Redis becomes justified when more than one API replica must share a work queue or a tool-result cache. Adding it now means another service in Compose, a client library, and a cache that can serve stale or attacker-influenced tool output before we have a cache policy. The duplicate-call key is a pure function until then.
+**Redis.** There is no queue. A single investigation is a short state machine with a hard timeout, and milestone 4 can run it as an in-process task. Redis becomes justified when more than one API replica must share a work queue or a tool-result cache. Adding it now means another service in Compose, a client library, and a cache that can serve stale or attacker-influenced tool output before we have a cache policy. The registry cache is per process only. `tool_call_key` itself is still a pure function.
 
 **pgvector.** Evidence is retrieved by primary key and by investigation id, not by similarity. Semantic search over past incidents would pull other customers' or other analysts' untrusted text into the prompt, which is a prompt-injection path, and it requires an extension the local Postgres image does not need. Relational citations are the grounding model. Vectors can wait until that model works and a real retrieval eval exists.
 
-**OpenTelemetry, Prometheus, LangGraph, OpenAI SDK, vendor TI SDKs.** See the sections above. Each was skipped because the interface does not need the package yet, not because the package is bad.
+**OpenTelemetry, Prometheus, LangGraph, OpenAI SDK, vendor TI SDKs.** See the sections above. HTTP to AbuseIPDB, VirusTotal, and OSV uses `httpx2` behind the allowlist. The SDKs are still not dependencies.
 
 ## What milestone 1 actually contains
 
@@ -214,4 +231,8 @@ Typed domain models, the transition and budget functions, source-adapter interfa
 
 ## What milestone 2 adds
 
-Wazuh and generic JSON normalization, stable validation error codes, the `alerts` table, and `POST /alerts` / `GET /alerts/{id}`. Replay of an `alert_id` is idempotent. Vendor adapters other than Wazuh still raise. `demo_mode` still does not create mock threat-intel results. Tools, the agent loop, reports, review storage, prompt-injection runtime defenses, evals, tracing, and any remediation executor are not in this release.
+Wazuh and generic JSON normalization, stable validation error codes, the `alerts` table, and `POST /alerts` / `GET /alerts/{id}`. Replay of an `alert_id` is idempotent. Vendor adapters other than Wazuh still raise. Tools are a separate call path; posting an alert does not look anything up.
+
+## What milestone 3 adds
+
+`ToolRegistry` and the five tools: `lookup_ip`, `lookup_hash`, `lookup_cve`, `search_mitre`, `lookup_domain`. AbuseIPDB and VirusTotal run only when their keys are set. OSV, the local ATT&CK subset, and DNS do not need keys. `demo_mode` selects labeled mocks for IP and hash only. There is still no agent loop, no report generator, no review storage, no eval runner, no tracing, and no remediation executor. `POST /investigations` is still 501.
