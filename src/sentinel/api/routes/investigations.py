@@ -1,4 +1,4 @@
-"""Start and reload an investigation. Review and report stay unimplemented."""
+"""Start, reload, and review an investigation. Metrics stay unimplemented."""
 
 import uuid
 from typing import Annotated
@@ -7,18 +7,28 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from sentinel.agents.executor import run_investigation
+from sentinel.agents.reporting import published_report
+from sentinel.agents.review import apply_analyst_review, review_status
 from sentinel.agents.transitions import new_investigation
 from sentinel.api.deps import get_db
 from sentinel.config.settings import get_settings
-from sentinel.errors import AlertNotFound, InvestigationNotFound
+from sentinel.errors import (
+    AlertNotFound,
+    BodyValidationError,
+    FieldIssue,
+    InvestigationNotFound,
+)
 from sentinel.evidence.correlate import correlate
 from sentinel.models.alert import AlertRecord
 from sentinel.schemas.alerts import NormalizedAlert
+from sentinel.schemas.errors import ValidationCode
 from sentinel.schemas.investigation import (
     CreateInvestigationRequest,
     EvidenceList,
     InvestigationState,
 )
+from sentinel.schemas.reports import IncidentReport
+from sentinel.schemas.review import AnalystReview, ReviewResult
 from sentinel.services.clock import SystemClock
 from sentinel.services.llm_http import build_llm_client
 from sentinel.storage.alerts import AlertRepository
@@ -39,8 +49,9 @@ def create_investigation(
 ) -> InvestigationState:
     """Create a state for a stored alert, run the executor, and return that state.
 
-    The run is synchronous. It stops at ``VERIFYING`` or ``FAILED``. It does
-    not approve a conclusion and it does not build an incident report.
+    The run is synchronous. A verified report moves the state to
+    ``AWAITING_REVIEW``. Anything else that stops the run is ``FAILED``.
+    This route does not approve a conclusion.
     """
     stored = AlertRepository(session).get(body.alert_id)
     if stored is None:
@@ -97,3 +108,40 @@ def get_evidence(
         indicators=linked.indicators,
         contradictions=linked.contradictions,
     )
+
+
+@router.get("/investigations/{id}/report", response_model=IncidentReport)
+def get_report(
+    id: str,
+    session: Annotated[Session, Depends(get_db)],
+) -> IncidentReport:
+    """Return the stored verified report. A missing report is not a draft."""
+    state = InvestigationRepository(session).load(id)
+    if state is None:
+        raise InvestigationNotFound()
+    return published_report(state)
+
+
+@router.post("/investigations/{id}/review", response_model=ReviewResult)
+def review_investigation(
+    id: str,
+    review: AnalystReview,
+    session: Annotated[Session, Depends(get_db)],
+) -> ReviewResult:
+    """Store an analyst decision. Approving the conclusion completes the run.
+
+    Approving remediation stores that decision and does not run an action.
+    """
+    state = InvestigationRepository(session).load(id)
+    if state is None:
+        raise InvestigationNotFound()
+    if review.investigation_id != id:
+        raise BodyValidationError(
+            (FieldIssue(code=ValidationCode.INVALID_FIELD, field="investigation_id"),)
+        )
+    updated = apply_analyst_review(state, review, now=SystemClock().now())
+    InvestigationRepository(session).save(updated)
+    stored = updated.review
+    if stored is None:
+        raise InvestigationNotFound()
+    return ReviewResult(status=review_status(updated), review=stored)

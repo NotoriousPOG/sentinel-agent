@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from sentinel.schemas.correlation import Contradiction, LinkedIndicator
 from sentinel.schemas.evidence import Evidence
+from sentinel.schemas.reports import IncidentReport
+from sentinel.schemas.review import AnalystReview
 from sentinel.schemas.timestamps import require_aware
 from sentinel.schemas.verification import VerificationResult
 
@@ -71,7 +73,15 @@ class InvestigationState(BaseModel):
     repair_attempts: int = Field(default=0, ge=0)
     verification: VerificationResult | None = Field(
         default=None,
-        description="Set by apply_verification. The executor leaves this empty.",
+        description="Set by apply_verification or report generation.",
+    )
+    report: IncidentReport | None = Field(
+        default=None,
+        description="Set only after verify_report accepts. Absent means no verified report.",
+    )
+    review: AnalystReview | None = Field(
+        default=None,
+        description="Analyst decision. Storing it does not run a response action.",
     )
 
     @field_validator("started_at", "updated_at", "deadline_at")

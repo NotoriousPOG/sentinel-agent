@@ -66,14 +66,16 @@ def test_valid_alert_is_stored_and_reloaded(client: TestClient) -> None:
 
 
 def test_reserved_routes_return_501(client: TestClient) -> None:
-    cases = [
-        ("get", "/investigations/abc/report", None),
-        ("get", "/metrics", None),
-    ]
-    for method, path, payload in cases:
-        response = client.request(method, path, json=payload)
-        assert response.status_code == 501, path
-        assert response.json()["error"] == "not_implemented"
+    response = client.get("/metrics")
+    assert response.status_code == 501
+    assert response.json()["error"] == "not_implemented"
+    assert response.json()["milestone"] == 9
+
+
+def test_missing_report_is_not_a_draft(client: TestClient) -> None:
+    missing = client.get("/investigations/abc/report")
+    assert missing.status_code == 404
+    assert missing.json()["error"] == "investigation_not_found"
 
 
 def test_investigation_lookup_is_not_a_stub(client: TestClient) -> None:
@@ -98,7 +100,7 @@ def test_review_execution_flag_is_rejected(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_valid_review_is_not_applied(client: TestClient) -> None:
+def test_review_of_missing_investigation_is_not_found(client: TestClient) -> None:
     response = client.post(
         "/investigations/inv-1/review",
         json={
@@ -108,8 +110,8 @@ def test_valid_review_is_not_applied(client: TestClient) -> None:
             "remediation": "reject",
         },
     )
-    assert response.status_code == 501
-    assert response.json()["milestone"] == 6
+    assert response.status_code == 404
+    assert response.json()["error"] == "investigation_not_found"
 
 
 def test_demo_mode_does_not_start_an_investigation_on_ingest(

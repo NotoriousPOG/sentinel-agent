@@ -1,6 +1,7 @@
 """Analyst decisions. Recording a decision does not run a response action."""
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,3 +23,12 @@ class AnalystReview(BaseModel):
     conclusion: ReviewDecision
     notes: str = Field(min_length=1, max_length=4000)
     remediation: ReviewDecision | None = None
+
+
+class ReviewResult(BaseModel):
+    """The stored decision and the status ``transition`` produced. Not an action."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["COMPLETE", "FAILED"]
+    review: AnalystReview

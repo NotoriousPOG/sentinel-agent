@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
-from tests.support import alert_payload
+from tests.support import alert_payload, canned_report_narrative
 
 from sentinel.config.settings import Settings, get_settings
 from sentinel.services.clock import SystemClock
@@ -32,6 +32,9 @@ class ScriptedModel:
         self.calls = 0
 
     def complete_structured(self, messages: Sequence[LlmMessage], response_model: type[Any]) -> Any:
+        narrative = canned_report_narrative(response_model)
+        if narrative is not None:
+            return narrative
         self.calls += 1
         step = self._steps.pop(0)
         return response_model.model_validate(step)
@@ -95,8 +98,8 @@ def test_post_runs_and_get_reloads(client: TestClient, monkeypatch: pytest.Monke
     created = client.post("/investigations", json={"alert_id": "alert-1"})
     assert created.status_code == 201
     body = created.json()
-    assert body["status"] == "VERIFYING"
-    assert body["status"] not in {"COMPLETE", "AWAITING_REVIEW"}
+    assert body["status"] == "AWAITING_REVIEW"
+    assert body["status"] != "COMPLETE"
     assert body["alert_id"] == "alert-1"
     assert body["tool_calls_made"] == 2
     assert len(body["evidence"]) == 2
@@ -108,7 +111,7 @@ def test_post_runs_and_get_reloads(client: TestClient, monkeypatch: pytest.Monke
 
     loaded = client.get(f"/investigations/{investigation_id}")
     assert loaded.status_code == 200
-    assert loaded.json()["status"] == "VERIFYING"
+    assert loaded.json()["status"] == "AWAITING_REVIEW"
     assert loaded.json()["tool_calls_made"] == 2
     assert loaded.json()["max_tool_calls"] == body["max_tool_calls"]
     assert loaded.json()["token_budget"] == body["token_budget"]
@@ -129,20 +132,31 @@ def test_post_runs_and_get_reloads(client: TestClient, monkeypatch: pytest.Monke
     assert "raw" not in payload["indicators"][0]
 
     report = client.get(f"/investigations/{investigation_id}/report")
-    assert report.status_code == 501
-    assert report.json()["milestone"] == 6
+    assert report.status_code == 200
+    document = report.json()
+    assert document["investigation_id"] == investigation_id
+    assert document["classification"] == "INCONCLUSIVE"
+    assert document["confidence"]["method"] == "weighted_evidence_v1"
+    assert document["confidence"]["score"] != 100
+    assert document["confidence"]["score"] == sum(
+        factor["weight"] for factor in document["confidence"]["factors"] if factor["satisfied"]
+    )
+    assert document["limitations"]
+    assert document["mitre_attack"] == []
 
     review = client.post(
         f"/investigations/{investigation_id}/review",
         json={
             "investigation_id": investigation_id,
             "conclusion": "approve",
-            "notes": "not stored",
+            "notes": "conclusion matches the stored fields",
+            "remediation": "reject",
         },
     )
-    assert review.status_code == 501
-    assert review.json()["milestone"] == 6
-    assert client.get(f"/investigations/{investigation_id}").json()["status"] == "VERIFYING"
+    assert review.status_code == 200
+    assert review.json()["status"] == "COMPLETE"
+    assert review.json()["review"]["remediation"] == "reject"
+    assert client.get(f"/investigations/{investigation_id}").json()["status"] == "COMPLETE"
 
 
 def test_schema_failure_is_persisted_without_a_report(
@@ -178,6 +192,9 @@ def test_schema_failure_is_persisted_without_a_report(
     assert loaded.status_code == 200
     assert loaded.json()["status"] == "FAILED"
     assert loaded.json()["model_outputs"][0]["raw_text"] == "not-json"
+    report = client.get(f"/investigations/{body['investigation_id']}/report")
+    assert report.status_code == 404
+    assert report.json()["code"] == "report_not_found"
 
 
 def test_missing_alert_and_missing_investigation(client: TestClient) -> None:

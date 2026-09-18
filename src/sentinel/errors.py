@@ -104,6 +104,38 @@ class InvestigationNotFound(SentinelError):
         super().__init__("investigation was not found")
 
 
+class ReportNotFound(SentinelError):
+    """The investigation has no verified report. A draft is not returned."""
+
+    def __init__(self) -> None:
+        super().__init__("report was not found")
+
+
+class ReviewNotAllowed(SentinelError):
+    """The investigation is not waiting for an analyst decision."""
+
+    def __init__(self) -> None:
+        super().__init__("review is not allowed")
+
+
+class BodyValidationError(SentinelError):
+    """The request body failed a check that is not a Pydantic parse error."""
+
+    def __init__(self, issues: Sequence[FieldIssue]) -> None:
+        self.issues = tuple(issues)
+        if not self.issues:
+            raise ValueError("BodyValidationError requires at least one issue")
+        super().__init__("request validation failed")
+
+
+class ReportRejected(SentinelError):
+    """A report could not be grounded in collected evidence. Nothing is stored."""
+
+    def __init__(self, detail: str) -> None:
+        self.detail = detail.strip()[:2000] or "report rejected"
+        super().__init__(self.detail)
+
+
 class ModelOutputInvalid(SentinelError):
     """The model text is not an instance of the response model.
 

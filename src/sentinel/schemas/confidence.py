@@ -1,8 +1,8 @@
 """Explainable confidence. The score is arithmetic over a fixed weight table.
 
 ``weighted_evidence_v1`` is not a probability. A model may not supply a
-different total: validation recomputes it. Deciding the booleans from evidence
-is milestone 6; the formula is enforced now so a bare percentage cannot land.
+different total: validation recomputes it. ``score_confidence`` sets the
+booleans from evidence. This schema only checks the arithmetic and citations.
 """
 
 from collections.abc import Sequence

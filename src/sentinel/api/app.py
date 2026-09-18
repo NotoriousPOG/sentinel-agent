@@ -31,9 +31,10 @@ def create_app() -> FastAPI:
         title="Sentinel Agent",
         version=__version__,
         description=(
-            "SOC investigation API. This release stores alerts and runs a bounded "
-            "investigation that stops at VERIFYING or FAILED. Report, review, and "
-            "metrics routes return 501. Nothing in this process remediates."
+            "SOC investigation API. A verified report waits for analyst review. "
+            "Approving the conclusion completes the investigation. Approving "
+            "remediation stores that decision and does not run an action. "
+            "GET /metrics returns 501."
         ),
     )
     register_exception_handlers(application)

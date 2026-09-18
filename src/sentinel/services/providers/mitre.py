@@ -7,12 +7,15 @@ retrieved 2026-09-18. This module does not download it.
 """
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
 from sentinel.errors import ProviderError
+from sentinel.schemas.patterns import normalize_technique_id
 from sentinel.schemas.tools import MitreTechniqueResult, SearchMitreInput, SearchMitreOutput
 from sentinel.services.clock import Clock
 
@@ -59,11 +62,46 @@ class MitreAttackCatalog:
         )
 
 
+@lru_cache(maxsize=1)
 def _load() -> tuple[_Technique, ...]:
     items = _payload().get("techniques")
     if not isinstance(items, list) or not items:
         raise ProviderError("mitre-attack", "invalid_catalog")
     return tuple(_Technique(result=_record(item)) for item in items)
+
+
+def official_technique(technique_id: str) -> MitreTechniqueResult | None:
+    """Return the subset record for ``technique_id``, or None when it is absent.
+
+    This reads the checked-in bundle. It does not download ATT&CK.
+    """
+    try:
+        normalized = normalize_technique_id(technique_id)
+    except ValueError:
+        return None
+    for technique in _load():
+        if technique.result.technique_id == normalized:
+            return technique.result
+    return None
+
+
+def technique_ids_in_result(result: Mapping[str, Any]) -> frozenset[str]:
+    """Technique ids on a ``search_mitre`` result. ``raw`` is not read."""
+    techniques = result.get("techniques")
+    if not isinstance(techniques, list):
+        return frozenset()
+    found: set[str] = set()
+    for item in techniques:
+        if not isinstance(item, dict):
+            continue
+        value = item.get("technique_id")
+        if not isinstance(value, str):
+            continue
+        try:
+            found.add(normalize_technique_id(value))
+        except ValueError:
+            continue
+    return frozenset(found)
 
 
 def _record(item: object) -> MitreTechniqueResult:

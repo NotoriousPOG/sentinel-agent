@@ -11,6 +11,7 @@ from sentinel.schemas.confidence import ConfidenceAssessment
 from sentinel.schemas.evidence import Evidence
 from sentinel.schemas.patterns import normalize_technique_id
 from sentinel.schemas.timestamps import require_aware
+from sentinel.services.providers.mitre import official_technique
 
 
 class Classification(StrEnum):
@@ -51,6 +52,15 @@ class MitreTechniqueRef(BaseModel):
     @classmethod
     def _technique_id(cls, value: str) -> str:
         return normalize_technique_id(value)
+
+    @model_validator(mode="after")
+    def _in_catalog(self) -> Self:
+        official = official_technique(self.technique_id)
+        if official is None:
+            raise ValueError(f"unknown technique id {self.technique_id}")
+        if self.technique_name != official.name or self.tactic != official.tactic:
+            raise ValueError("technique name and tactic must match the Enterprise ATT&CK subset")
+        return self
 
 
 class TimelineEvent(BaseModel):

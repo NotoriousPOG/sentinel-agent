@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.support import NOW
+from tests.support import NOW, canned_report_narrative
 
 from sentinel.agents.budgets import tool_call_key
 from sentinel.agents.executor import run_investigation
@@ -60,6 +60,9 @@ class ScriptedModel:
         self.seen: list[list[LlmMessage]] = []
 
     def complete_structured(self, messages: Sequence[LlmMessage], response_model: type[Any]) -> Any:
+        narrative = canned_report_narrative(response_model)
+        if narrative is not None:
+            return narrative
         self.calls += 1
         self.seen.append(list(messages))
         if not self._steps:
@@ -75,6 +78,9 @@ class ForeverTools:
         self.calls = 0
 
     def complete_structured(self, messages: Sequence[LlmMessage], response_model: type[Any]) -> Any:
+        narrative = canned_report_narrative(response_model)
+        if narrative is not None:
+            return narrative
         self.calls += 1
         if self.calls > 20:
             raise AssertionError("tool loop did not stop")
@@ -240,14 +246,14 @@ def test_tool_loop_stops_at_max_tool_calls() -> None:
     assert model.calls == 3
     assert ip.calls == 3
     assert result.tool_calls_made == 3
-    assert result.status is InvestigationStatus.VERIFYING
+    assert result.status is InvestigationStatus.AWAITING_REVIEW
+    assert result.report is not None
     assert len(result.evidence) == 3
     assert {item.source for item in result.evidence} == {"mock:abuseipdb"}
     assert {item.reliability for item in result.evidence} == {EvidenceReliability.LOW}
     assert result.retries == 0
     assert result.error is None
     assert result.status is not InvestigationStatus.COMPLETE
-    assert result.status is not InvestigationStatus.AWAITING_REVIEW
     assert RAW_MARKER not in (result.error or "")
 
 
@@ -265,7 +271,8 @@ def test_duplicate_tool_key_uses_the_registry_once_and_stops() -> None:
 
     assert registry.calls == 2
     assert ip.calls == 1
-    assert result.status is InvestigationStatus.VERIFYING
+    assert result.status is InvestigationStatus.AWAITING_REVIEW
+    assert result.report is not None
     assert result.tool_calls_made == 1
     assert result.tool_history[0].from_cache is False
     assert result.tool_history[0].key == tool_call_key("lookup_ip", {"ip": "203.0.113.10"})
@@ -308,7 +315,7 @@ def test_zero_repair_attempts_fail_on_the_first_invalid_output() -> None:
     assert result.model_outputs[0].raw_text == "bad-output"
 
 
-def test_one_repair_then_finish_stops_at_verifying() -> None:
+def test_one_repair_then_finish_is_inconclusive() -> None:
     model = ScriptedModel(
         [
             _invalid("bad-output"),
@@ -317,10 +324,15 @@ def test_one_repair_then_finish_stops_at_verifying() -> None:
     )
     result = _run(model)
     assert model.calls == 2
-    assert result.status is InvestigationStatus.VERIFYING
+    assert result.status is InvestigationStatus.AWAITING_REVIEW
     assert result.error is None
     assert result.repair_attempts == 1
     assert result.evidence == []
+    assert result.report is not None
+    assert result.report.classification.value == "INCONCLUSIVE"
+    assert result.report.limitations
+    assert result.report.evidence == []
+    assert result.status is not InvestigationStatus.COMPLETE
 
 
 def test_unknown_tool_and_invalid_arguments_do_not_call_the_provider() -> None:
@@ -435,7 +447,7 @@ def test_prompts_keep_untrusted_text_out_of_the_system_message() -> None:
         ]
     )
     result = _run(model, clock=clock, ip=ip)
-    assert result.status is InvestigationStatus.VERIFYING
+    assert result.status is InvestigationStatus.AWAITING_REVIEW
     alert = _alert()
     leaked = [
         alert.username,
@@ -483,7 +495,8 @@ def test_executor_only_uses_legal_transitions(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr("sentinel.agents.executor.transition", spy)
     model = ScriptedModel([{"action": "finish", "tool": None, "arguments": {}}])
     result = _run(model)
-    assert result.status is InvestigationStatus.VERIFYING
+    assert result.status is InvestigationStatus.AWAITING_REVIEW
+    assert result.report is not None
     assert seen == [
         InvestigationStatus.VALIDATING,
         InvestigationStatus.INVESTIGATING,

@@ -1,7 +1,8 @@
 """Check a report against an alert and collected tool output.
 
-The report is built by the caller. This module does not call a model, does not
-score ``weighted_evidence_v1``, and does not map MITRE techniques.
+The report is built by the caller. This module does not call a model and does
+not score ``weighted_evidence_v1``. A MITRE id is accepted only when a cited
+``search_mitre`` result contains it and the id is in the local ATT&CK subset.
 """
 
 from collections.abc import Sequence
@@ -18,7 +19,7 @@ from sentinel.schemas.alerts import NormalizedAlert
 from sentinel.schemas.correlation import Contradiction, JsonScalar
 from sentinel.schemas.evidence import Evidence
 from sentinel.schemas.investigation import InvestigationState, InvestigationStatus
-from sentinel.schemas.reports import Classification, IncidentReport
+from sentinel.schemas.reports import Classification, IncidentReport, MitreTechniqueRef
 from sentinel.schemas.timestamps import require_aware
 from sentinel.schemas.verification import (
     FailedLookup,
@@ -26,6 +27,7 @@ from sentinel.schemas.verification import (
     VerificationIssue,
     VerificationResult,
 )
+from sentinel.services.providers.mitre import official_technique, technique_ids_in_result
 from sentinel.tools.policy import reliability_for_provider
 
 # Fields a fact may cite. ``raw`` is intentionally absent. Reliability is not here.
@@ -68,6 +70,7 @@ def verify_report(
     issues: list[VerificationIssue] = []
     _extend(issues, _unknown_indicators(report, alert, collected))
     _extend(issues, _record_issues(report, by_id))
+    _extend(issues, _mitre_issues(report, by_id))
     _extend(issues, _reliability_issues([*report.evidence, *collected]))
     _extend(
         issues, _classification_issues(report, collected, failed_lookups, linked.contradictions)
@@ -148,6 +151,40 @@ def _record_issues(
                 )
             )
     return issues
+
+
+def _mitre_issues(
+    report: IncidentReport,
+    by_id: dict[str, Evidence],
+) -> list[VerificationIssue]:
+    issues: list[VerificationIssue] = []
+    for technique in report.mitre_attack:
+        if official_technique(technique.technique_id) is None:
+            issues.append(
+                _issue(
+                    "unknown_technique",
+                    f"technique {technique.technique_id} is not in the Enterprise ATT&CK subset",
+                )
+            )
+            continue
+        if not _technique_cited(technique, by_id):
+            issues.append(
+                _issue(
+                    "technique_not_in_evidence",
+                    f"technique {technique.technique_id} is not in a cited search_mitre result",
+                )
+            )
+    return issues
+
+
+def _technique_cited(technique: MitreTechniqueRef, by_id: dict[str, Evidence]) -> bool:
+    for evidence_id in technique.evidence_ids:
+        item = by_id.get(evidence_id)
+        if item is None or item.tool != "search_mitre":
+            continue
+        if technique.technique_id in technique_ids_in_result(item.result):
+            return True
+    return False
 
 
 def _reliability_issues(items: Sequence[Evidence]) -> list[VerificationIssue]:

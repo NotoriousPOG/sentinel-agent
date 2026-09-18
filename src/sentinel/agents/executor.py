@@ -1,8 +1,9 @@
 """Bounded investigation loop.
 
-The only status changes go through ``transition``. Budgets are the predicates
-in ``agents/budgets.py``. ``COMPLETE`` is not produced here: a finished tool
-phase stops at ``VERIFYING``. There is no provider backoff.
+The only status changes in the tool loop go through ``transition``. Budgets
+are the predicates in ``agents/budgets.py``. The loop stops at ``VERIFYING``.
+``finalize_investigation`` then stores a verified report and moves to
+``AWAITING_REVIEW``, or ``FAILED``. ``COMPLETE`` is not produced here.
 """
 
 from collections.abc import Sequence
@@ -22,6 +23,7 @@ from sentinel.agents.prompts import (
     repair_message,
     tool_result_message,
 )
+from sentinel.agents.reporting import finalize_investigation
 from sentinel.agents.transitions import transition
 from sentinel.errors import (
     BudgetExhausted,
@@ -56,12 +58,12 @@ def run_investigation(
     clock: Clock,
     max_repair_attempts: int,
 ) -> InvestigationState:
-    """Walk one investigation until ``VERIFYING`` or ``FAILED``.
+    """Walk one investigation until a verified report is stored, or ``FAILED``.
 
-    Stops, and does not hang, when any of these is true:
+    The tool loop stops, and does not hang, when any of these is true:
 
     - the model returns finish
-    - ``tool_calls_made`` reaches ``max_tool_calls`` (``VERIFYING`` if any
+    - ``tool_calls_made`` reaches ``max_tool_calls`` (report step if any
       evidence was stored, otherwise ``FAILED``)
     - the model repeats a tool key already recorded on this state
     - schema-invalid output, an unknown tool name, or invalid tool arguments
@@ -71,8 +73,8 @@ def run_investigation(
     - the model endpoint or a tool provider raises a transport or configuration
       error. Those are not investigation retries and they are not repeated
 
-    ``COMPLETE`` and ``AWAITING_REVIEW`` are not entered. Analyst approval is
-    a later milestone.
+    After ``VERIFYING``, the report step may move to ``AWAITING_REVIEW``.
+    ``COMPLETE`` is not entered here.
     """
     if state.status is not InvestigationStatus.RECEIVED:
         raise ValueError("executor starts from RECEIVED")
@@ -132,13 +134,25 @@ def run_investigation(
         )
 
         if turn.action is TurnAction.FINISH:
-            return _verify(state, clock.now())
+            return _after_verifying(
+                state,
+                alert=alert,
+                llm=llm,
+                clock=clock,
+                max_repair_attempts=max_repair_attempts,
+            )
 
         now = clock.now()
         if is_past_deadline(state, now):
             return _fail(state, "deadline exceeded", now)
         if not can_call_tool(state):
-            return _stop_for_tool_budget(state, now)
+            return _stop_for_tool_budget(
+                state,
+                alert=alert,
+                llm=llm,
+                clock=clock,
+                max_repair_attempts=max_repair_attempts,
+            )
 
         raw_turn = turn.model_dump_json()
         tool_name = turn.tool if turn.tool is not None else ""
@@ -180,7 +194,13 @@ def run_investigation(
         now = clock.now()
         if execution.key in state.seen_tool_calls:
             if state.evidence:
-                return _verify(state, now)
+                return _after_verifying(
+                    state,
+                    alert=alert,
+                    llm=llm,
+                    clock=clock,
+                    max_repair_attempts=max_repair_attempts,
+                )
             return _fail(state, "duplicate tool call", now)
 
         state = record_tool_call(state, execution.key, now=now)
@@ -210,7 +230,13 @@ def run_investigation(
             )
         )
         if not can_call_tool(state):
-            return _stop_for_tool_budget(state, clock.now())
+            return _stop_for_tool_budget(
+                state,
+                alert=alert,
+                llm=llm,
+                clock=clock,
+                max_repair_attempts=max_repair_attempts,
+            )
 
 
 def _repair(
@@ -244,10 +270,41 @@ def _repair(
     return recorded, repairs_used, False
 
 
-def _stop_for_tool_budget(state: InvestigationState, now: datetime) -> InvestigationState:
+def _stop_for_tool_budget(
+    state: InvestigationState,
+    *,
+    alert: NormalizedAlert,
+    llm: LlmProvider,
+    clock: Clock,
+    max_repair_attempts: int,
+) -> InvestigationState:
     if state.evidence:
-        return _verify(state, now)
-    return _fail(state, "tool call budget exhausted", now)
+        return _after_verifying(
+            state,
+            alert=alert,
+            llm=llm,
+            clock=clock,
+            max_repair_attempts=max_repair_attempts,
+        )
+    return _fail(state, "tool call budget exhausted", clock.now())
+
+
+def _after_verifying(
+    state: InvestigationState,
+    *,
+    alert: NormalizedAlert,
+    llm: LlmProvider,
+    clock: Clock,
+    max_repair_attempts: int,
+) -> InvestigationState:
+    verifying = _verify(state, clock.now())
+    return finalize_investigation(
+        verifying,
+        alert=alert,
+        llm=llm,
+        clock=clock,
+        max_repair_attempts=max_repair_attempts,
+    )
 
 
 def _verify(state: InvestigationState, now: datetime) -> InvestigationState:
