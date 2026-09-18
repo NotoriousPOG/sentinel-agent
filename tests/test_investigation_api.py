@@ -115,9 +115,18 @@ def test_post_runs_and_get_reloads(client: TestClient, monkeypatch: pytest.Monke
 
     evidence = client.get(f"/investigations/{investigation_id}/evidence")
     assert evidence.status_code == 200
-    assert evidence.json()["investigation_id"] == investigation_id
-    assert evidence.json()["evidence"] == body["evidence"]
-    assert "correlated" not in evidence.text
+    payload = evidence.json()
+    assert payload["investigation_id"] == investigation_id
+    assert payload["evidence"] == body["evidence"]
+    assert payload["contradictions"] == []
+    assert len(payload["indicators"]) == 2
+    linked = {item["value"]: item["evidence_ids"] for item in payload["indicators"]}
+    assert set(linked) == {"203.0.113.10", "203.0.113.11"}
+    by_ip = {item["result"]["ip"]: item["evidence_id"] for item in payload["evidence"]}
+    assert linked["203.0.113.10"] == [by_ip["203.0.113.10"]]
+    assert linked["203.0.113.11"] == [by_ip["203.0.113.11"]]
+    assert "result" not in payload["indicators"][0]
+    assert "raw" not in payload["indicators"][0]
 
     report = client.get(f"/investigations/{investigation_id}/report")
     assert report.status_code == 501

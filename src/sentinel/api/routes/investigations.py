@@ -11,6 +11,7 @@ from sentinel.agents.transitions import new_investigation
 from sentinel.api.deps import get_db
 from sentinel.config.settings import get_settings
 from sentinel.errors import AlertNotFound, InvestigationNotFound
+from sentinel.evidence.correlate import correlate
 from sentinel.models.alert import AlertRecord
 from sentinel.schemas.alerts import NormalizedAlert
 from sentinel.schemas.investigation import (
@@ -81,8 +82,18 @@ def get_evidence(
     id: str,
     session: Annotated[Session, Depends(get_db)],
 ) -> EvidenceList:
-    """Return evidence records stored on the state. This does not correlate them."""
+    """Return each stored row, indicator links, and contradiction links.
+
+    Two provider results stay two rows. This does not verify a report and does
+    not change investigation status.
+    """
     state = InvestigationRepository(session).load(id)
     if state is None:
         raise InvestigationNotFound()
-    return EvidenceList(investigation_id=state.investigation_id, evidence=list(state.evidence))
+    linked = correlate(state.evidence)
+    return EvidenceList(
+        investigation_id=state.investigation_id,
+        evidence=linked.evidence,
+        indicators=linked.indicators,
+        contradictions=linked.contradictions,
+    )

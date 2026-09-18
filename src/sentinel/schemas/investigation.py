@@ -9,8 +9,10 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from sentinel.schemas.correlation import Contradiction, LinkedIndicator
 from sentinel.schemas.evidence import Evidence
 from sentinel.schemas.timestamps import require_aware
+from sentinel.schemas.verification import VerificationResult
 
 
 class InvestigationStatus(StrEnum):
@@ -67,6 +69,10 @@ class InvestigationState(BaseModel):
     tool_history: list[ToolHistoryEntry] = Field(default_factory=list)
     model_outputs: list[ModelOutputRecord] = Field(default_factory=list)
     repair_attempts: int = Field(default=0, ge=0)
+    verification: VerificationResult | None = Field(
+        default=None,
+        description="Set by apply_verification. The executor leaves this empty.",
+    )
 
     @field_validator("started_at", "updated_at", "deadline_at")
     @classmethod
@@ -83,9 +89,14 @@ class CreateInvestigationRequest(BaseModel):
 
 
 class EvidenceList(BaseModel):
-    """Evidence rows stored on one investigation. Not a correlation result."""
+    """Separate evidence rows for one investigation, plus links between them.
+
+    ``indicators`` point at rows. They do not contain a merged provider result.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     investigation_id: str = Field(min_length=1, max_length=128)
     evidence: list[Evidence]
+    indicators: list[LinkedIndicator] = Field(default_factory=list)
+    contradictions: list[Contradiction] = Field(default_factory=list)

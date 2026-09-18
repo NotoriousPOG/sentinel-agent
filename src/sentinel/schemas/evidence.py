@@ -30,11 +30,11 @@ class Evidence(BaseModel):
     reliability: EvidenceReliability
     supports: list[str] = Field(
         default_factory=list,
-        description="Claim ids this record supports. Claim objects are milestone 5.",
+        description="Claim ids this record supports. Correlation assigns these, not the model.",
     )
     contradicts: list[str] = Field(
         default_factory=list,
-        description="Claim ids this record contradicts.",
+        description="Claim ids this record contradicts. The contradicting row is kept.",
     )
 
     @field_validator("timestamp")
