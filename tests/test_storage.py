@@ -34,10 +34,13 @@ def test_alembic_upgrade_is_idempotent(tmp_path: Path, monkeypatch: pytest.Monke
             version = connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            tables = connection.execute(
-                text("SELECT name FROM sqlite_master WHERE type = 'table'")
-            ).scalars()
-            assert version == "0002_alerts"
-            assert "alerts" in set(tables)
+            names = set(
+                connection.execute(
+                    text("SELECT name FROM sqlite_master WHERE type = 'table'")
+                ).scalars()
+            )
+            assert version == "0003_investigations"
+            assert "alerts" in names
+            assert "investigations" in names
     finally:
         engine.dispose()

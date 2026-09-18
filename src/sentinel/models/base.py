@@ -1,7 +1,7 @@
 """SQLAlchemy models.
 
-Alert rows live in ``models/alert.py``. Investigation tables are milestone 4
-and are not created here.
+Alert rows live in ``models/alert.py``. Investigation rows live in
+``models/investigation.py``.
 """
 
 from sqlalchemy.orm import DeclarativeBase

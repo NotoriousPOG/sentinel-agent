@@ -67,9 +67,6 @@ def test_valid_alert_is_stored_and_reloaded(client: TestClient) -> None:
 
 def test_reserved_routes_return_501(client: TestClient) -> None:
     cases = [
-        ("post", "/investigations", {"alert_id": "alert-1"}),
-        ("get", "/investigations/abc", None),
-        ("get", "/investigations/abc/evidence", None),
         ("get", "/investigations/abc/report", None),
         ("get", "/metrics", None),
     ]
@@ -77,6 +74,15 @@ def test_reserved_routes_return_501(client: TestClient) -> None:
         response = client.request(method, path, json=payload)
         assert response.status_code == 501, path
         assert response.json()["error"] == "not_implemented"
+
+
+def test_investigation_lookup_is_not_a_stub(client: TestClient) -> None:
+    missing_alert = client.post("/investigations", json={"alert_id": "alert-1"})
+    assert missing_alert.status_code == 404
+    assert missing_alert.json()["error"] == "alert_not_found"
+    missing = client.get("/investigations/abc")
+    assert missing.status_code == 404
+    assert missing.json()["error"] == "investigation_not_found"
 
 
 def test_review_execution_flag_is_rejected(client: TestClient) -> None:
@@ -106,12 +112,13 @@ def test_valid_review_is_not_applied(client: TestClient) -> None:
     assert response.json()["milestone"] == 6
 
 
-def test_demo_mode_does_not_enable_investigations(
+def test_demo_mode_does_not_start_an_investigation_on_ingest(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("SENTINEL_DEMO_MODE", "true")
     get_settings.cache_clear()
     health = client.get("/health")
     assert health.json()["demo_mode"] is True
-    created = client.post("/investigations", json={"alert_id": "alert-1"})
-    assert created.status_code == 501
+    missing = client.post("/investigations", json={"alert_id": "alert-1"})
+    assert missing.status_code == 404
+    assert missing.json()["error"] == "alert_not_found"

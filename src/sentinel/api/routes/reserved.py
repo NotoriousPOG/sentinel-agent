@@ -1,35 +1,11 @@
-"""Product routes that exist so the contract is stable. They do no work."""
+"""Routes that are named and not built yet. They do no work."""
 
 from fastapi import APIRouter
 
 from sentinel.api.errors import NotImplementedBody, not_implemented
-from sentinel.schemas.investigation import CreateInvestigationRequest
 from sentinel.schemas.review import AnalystReview
 
 router = APIRouter(tags=["reserved"])
-
-
-@router.post("/investigations", response_model=NotImplementedBody, status_code=501)
-def create_investigation(body: CreateInvestigationRequest) -> NotImplementedBody:
-    """Accept an alert id and do not start an investigation."""
-    _ = body
-    return not_implemented(4, "Investigation execution is not implemented.")
-
-
-@router.get("/investigations/{id}", response_model=NotImplementedBody, status_code=501)
-def get_investigation(id: str) -> NotImplementedBody:
-    _ = id
-    return not_implemented(4, "Investigation lookup is not implemented.")
-
-
-@router.get(
-    "/investigations/{id}/evidence",
-    response_model=NotImplementedBody,
-    status_code=501,
-)
-def get_evidence(id: str) -> NotImplementedBody:
-    _ = id
-    return not_implemented(5, "Evidence retrieval is not implemented.")
 
 
 @router.get(

@@ -7,8 +7,20 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
-from sentinel.errors import AlertNotFound, AlertValidationError, FieldIssue
-from sentinel.schemas.errors import AlertNotFoundBody, FieldError, ValidationErrorBody
+from sentinel.errors import (
+    AlertNotFound,
+    AlertValidationError,
+    ConfigurationError,
+    FieldIssue,
+    InvestigationNotFound,
+)
+from sentinel.schemas.errors import (
+    AlertNotFoundBody,
+    FieldError,
+    InvestigationNotFoundBody,
+    NotConfiguredBody,
+    ValidationErrorBody,
+)
 from sentinel.services.validation import issues_from_error_list
 
 
@@ -33,3 +45,15 @@ def register_exception_handlers(application: FastAPI) -> None:
     @application.exception_handler(AlertNotFound)
     async def on_alert_not_found(_request: Request, _exc: AlertNotFound) -> JSONResponse:
         return JSONResponse(status_code=404, content=AlertNotFoundBody().model_dump(mode="json"))
+
+    @application.exception_handler(InvestigationNotFound)
+    async def on_investigation_not_found(
+        _request: Request, _exc: InvestigationNotFound
+    ) -> JSONResponse:
+        body = InvestigationNotFoundBody().model_dump(mode="json")
+        return JSONResponse(status_code=404, content=body)
+
+    @application.exception_handler(ConfigurationError)
+    async def on_not_configured(_request: Request, exc: ConfigurationError) -> JSONResponse:
+        body = NotConfiguredBody(provider=exc.provider).model_dump(mode="json")
+        return JSONResponse(status_code=503, content=body)

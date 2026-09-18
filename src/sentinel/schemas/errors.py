@@ -36,3 +36,19 @@ class AlertNotFoundBody(BaseModel):
 
     error: Literal["alert_not_found"] = "alert_not_found"
     code: Literal["alert_not_found"] = "alert_not_found"
+
+
+class InvestigationNotFoundBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    error: Literal["investigation_not_found"] = "investigation_not_found"
+    code: Literal["investigation_not_found"] = "investigation_not_found"
+
+
+class NotConfiguredBody(BaseModel):
+    """A required setting is missing. The body names the provider, not the secret."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    error: Literal["not_configured"] = "not_configured"
+    provider: str = Field(min_length=1, max_length=64)
