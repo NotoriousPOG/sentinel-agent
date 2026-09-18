@@ -1,0 +1,33 @@
+# Local development only. The database password is for this Compose network,
+# not a production credential. Do not reuse it anywhere else.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: sentinel
+      POSTGRES_DB: sentinel
+    ports:
+      - "127.0.0.1:54329:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - sentinel-pg:/var/lib/postgresql/data
+
+  api:
+    build: .
+    ports:
+      - "127.0.0.1:8091:8091"
+    environment:
+      SENTINEL_DATABASE_URL: postgresql+psycopg://sentinel:sentinel@postgres:5432/sentinel
+      SENTINEL_DEMO_MODE: "false"
+      SENTINEL_LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  sentinel-pg:

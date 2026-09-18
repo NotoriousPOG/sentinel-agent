@@ -202,7 +202,7 @@ Verified on 2026-09-18 with `pip index versions <name>` against PyPI. Versions b
 | Package | Version verified | Why it is here |
 | --- | --- | --- |
 | `pytest` | 9.1.1 | Test runner. |
-| `httpx` | 0.28.1 | Starlette `TestClient` imports it. Not a runtime dependency. Tool HTTP moves it to runtime in milestone 3 if the tool code actually calls it. |
+| `httpx2` | 2.13.0 | Starlette 1.6's `TestClient` imports `httpx2` and treats `httpx` as a deprecated fallback. Dev-only. A runtime HTTP client waits for milestone 3, when a tool actually calls out. |
 | `ruff` | 0.16.8 | Lint and format in CI. |
 | `mypy` | 2.3.1 | Type check. Uses the `pydantic.mypy` plugin shipped inside `pydantic`, not a separate package. |
 | `bandit` | 1.9.4 | Static checks for obvious dangerous calls in `src/`. |
@@ -219,6 +219,7 @@ Verified on 2026-09-18 with `pip index versions <name>` against PyPI. Versions b
 | OpenTelemetry (`opentelemetry-api`, `opentelemetry-sdk`) | Milestone 9, and only with a default-off exporter. A no-op dependency is still a dependency. |
 | `prometheus-client` | Same milestone as `GET /metrics`. The route is 501 until then. |
 | `structlog` | stdlib logging is enough until milestone 9. |
+| `httpx` | The test client does not need it. Runtime HTTP is still milestone 3. |
 | Vendor SDKs (VirusTotal, and similar) | HTTP behind `ThreatIntelProvider` when a provider is implemented. No SDK by default. |
 | `email-validator` | Not used. `EmailStr` is not a field. |
 

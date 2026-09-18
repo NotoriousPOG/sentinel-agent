@@ -67,7 +67,7 @@ The call path, when milestone 3 and 4 exist, will be:
 
 There is no `exec`, no `run_shell`, and no `fetch_url` tool. URLs that appear in alerts or provider payloads are stored as strings. If a later milestone needs to retrieve a page, that tool must allowlist scheme and host. It will not take an arbitrary URL from the model or from alert text.
 
-httpx is not a runtime dependency yet. Adding an HTTP client before any tool exists would imply outbound calls this release does not make. The test extra installs httpx because Starlette's `TestClient` imports it.
+httpx is not a runtime dependency. Starlette 1.6's `TestClient` asks for `httpx2` (verified 2.13.0) and only falls back to `httpx` with a deprecation warning, so the test extra installs `httpx2`. Tool HTTP, if it uses `httpx` or `httpx2`, waits for milestone 3 when a tool actually makes a call.
 
 ## Evidence grounding
 
