@@ -1,5 +1,11 @@
 # Evaluations
 
-Milestone 8 adds the synthetic dataset and the runner.
+This directory holds a synthetic dataset. The cases are not live alerts, not customer incidents, and not live threat intelligence. Expected labels are in `dataset.json`. The runner does not assign them.
 
-`python -m sentinel.evals run` does not exist yet. This directory intentionally has no dataset and no scores.
+`demo_mode` mocks used by the runner are already labeled `mock:`. Those rows are not live intelligence. The conflicting-intelligence case is two `synthetic:` evidence rows, not a second vendor. The CVE case uses a public identifier and an injected transport. It does not download OSV.
+
+```bash
+python -m sentinel.evals run --output-dir evals/out
+```
+
+The command writes `report.json` and `report.md` in the directory the flag selects, and it prints the counts. This file does not copy those counts. What each count means, and what it is not, is in `docs/evaluations.md`.

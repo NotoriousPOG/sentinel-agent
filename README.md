@@ -38,9 +38,10 @@ This repository stores normalized alerts, looks up indicators through a closed s
 | DNS | Resolver with a timeout. Tests inject the resolver. The domain is not fetched over HTTP |
 | `demo_mode` | Selects mock IP and hash providers tagged `mock:`. Does not start an investigation by itself, and does not replace a failed live call |
 | Prompt injection | Not a detector. Hostile alert text stays inside the data markers. `exec`, `run_shell`, and `fetch_url` fail closed and do not call a provider. Classification, confidence, and review do not follow alert text |
-| Evals, tracing, remediation | Not implemented. No benchmark numbers. `GET /metrics` is still 501. No remediation executor |
+| Evals | Offline runner: `python -m sentinel.evals run --output-dir <dir>`. Synthetic dataset. The command prints the counts. This file does not copy them |
+| Tracing, remediation | Not implemented. `GET /metrics` is still 501. No OpenTelemetry. No remediation executor |
 
-There are no benchmark numbers because nothing has been measured.
+Evaluation counts come from `python -m sentinel.evals run`. They are not copied into this file.
 
 ## Local API
 

@@ -12,3 +12,4 @@ build/
 *.db
 .coverage
 htmlcov/
+evals/out/
