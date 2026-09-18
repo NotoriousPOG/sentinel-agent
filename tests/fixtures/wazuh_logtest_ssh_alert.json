@@ -1,0 +1,86 @@
+{
+  "timestamp": "2023-04-25T13:50:43.764000Z",
+  "rule": {
+    "level": 5,
+    "description": "sshd: Attempt to login using a non-existent user",
+    "id": "5710",
+    "mitre": {
+      "id": [
+        "T1110.001",
+        "T1021.004",
+        "T1078"
+      ],
+      "tactic": [
+        "Credential Access",
+        "Lateral Movement",
+        "Defense Evasion",
+        "Persistence",
+        "Privilege Escalation",
+        "Initial Access"
+      ],
+      "technique": [
+        "Password Guessing",
+        "SSH",
+        "Valid Accounts"
+      ]
+    },
+    "firedtimes": 1,
+    "mail": false,
+    "groups": [
+      "syslog",
+      "sshd",
+      "authentication_failed",
+      "invalid_login"
+    ],
+    "gdpr": [
+      "IV_35.7.d",
+      "IV_32.2"
+    ],
+    "gpg13": [
+      "7.1"
+    ],
+    "hipaa": [
+      "164.312.b"
+    ],
+    "nist_800_53": [
+      "AU.14",
+      "AC.7",
+      "AU.6"
+    ],
+    "pci_dss": [
+      "10.2.4",
+      "10.2.5",
+      "10.6.1"
+    ],
+    "tsc": [
+      "CC6.1",
+      "CC6.8",
+      "CC7.2",
+      "CC7.3"
+    ]
+  },
+  "agent": {
+    "id": "000",
+    "name": "centos7"
+  },
+  "manager": {
+    "name": "centos7"
+  },
+  "id": "1682430643.3725",
+  "full_log": "Oct 15 21:07:00 linux-agent sshd[29205]: Invalid user blimey from 18.18.18.18 port 48928",
+  "predecoder": {
+    "program_name": "sshd",
+    "timestamp": "Oct 15 21:07:00",
+    "hostname": "linux-agent"
+  },
+  "decoder": {
+    "parent": "sshd",
+    "name": "sshd"
+  },
+  "data": {
+    "srcip": "18.18.18.18",
+    "srcport": "48928",
+    "srcuser": "blimey"
+  },
+  "location": "master->/var/log/syslog"
+}

@@ -1,18 +1,24 @@
 """Source adapters.
 
-``GenericJsonAdapter`` checks the normalized shape and returns it. That is
-schema validation, not ingestion: nothing is stored.
+``GenericJsonAdapter`` maps a JSON object onto ``NormalizedAlert``. Unknown
+keys are kept on ``raw_event`` or ``metadata`` and are not first-class fields.
 
-``WazuhAdapter`` checks a minimal envelope, then refuses to map it. Vendor
-products below are importable interfaces and do not parse payloads.
+``WazuhAdapter`` maps Wazuh's documented alert JSON. It does not call a manager.
+Vendor products below are importable interfaces and do not parse payloads.
 """
 
+import copy
 from collections.abc import Mapping
-from typing import Protocol
+from typing import Any, Protocol
 
-from sentinel.errors import NotImplementedCapability
+from pydantic import ValidationError
+
+from sentinel.errors import AlertValidationError, NotImplementedCapability
 from sentinel.schemas.alerts import NormalizedAlert
-from sentinel.schemas.wazuh import WazuhAlertEnvelope
+from sentinel.services.validation import issues_from_validation
+from sentinel.services.wazuh import normalize_wazuh
+
+_KNOWN_ALERT_FIELDS = frozenset(NormalizedAlert.model_fields)
 
 
 class SourceAdapter(Protocol):
@@ -25,7 +31,7 @@ class SourceAdapter(Protocol):
 
 
 class GenericJsonAdapter:
-    """Identity adapter for documents that are already ``NormalizedAlert`` objects."""
+    """Map a JSON object. Extra keys are preserved, not promoted."""
 
     name = "generic_json"
     implemented = True
@@ -33,20 +39,38 @@ class GenericJsonAdapter:
     def normalize(self, payload: object) -> NormalizedAlert:
         if not isinstance(payload, dict):
             raise TypeError("generic JSON alert must be a JSON object")
-        return NormalizedAlert.model_validate(payload)
+        known = {key: value for key, value in payload.items() if key in _KNOWN_ALERT_FIELDS}
+        unknown = {key: value for key, value in payload.items() if key not in _KNOWN_ALERT_FIELDS}
+        if unknown and "raw_event" not in payload:
+            known["raw_event"] = copy.deepcopy(payload)
+        if unknown:
+            metadata = known.get("metadata")
+            if metadata is None:
+                metadata = {}
+            if isinstance(metadata, dict):
+                merged: dict[str, Any] = copy.deepcopy(metadata)
+                unmapped_raw = merged.get("unmapped_fields")
+                unmapped = dict(unmapped_raw) if isinstance(unmapped_raw, dict) else {}
+                for key, value in unknown.items():
+                    unmapped.setdefault(key, copy.deepcopy(value))
+                merged["unmapped_fields"] = unmapped
+                known["metadata"] = merged
+        try:
+            return NormalizedAlert.model_validate(known)
+        except ValidationError as exc:
+            raise AlertValidationError(issues_from_validation(exc)) from exc
 
 
 class WazuhAdapter:
-    """Typed Wazuh boundary. Normalization is milestone 2."""
+    """Map a documented Wazuh alert. No manager connection."""
 
     name = "wazuh"
-    implemented = False
+    implemented = True
 
     def normalize(self, payload: object) -> NormalizedAlert:
         if not isinstance(payload, Mapping):
             raise TypeError("Wazuh alert must be a JSON object")
-        WazuhAlertEnvelope.model_validate(dict(payload))
-        raise NotImplementedCapability("Wazuh alert normalization", milestone=2)
+        return normalize_wazuh(payload)
 
 
 class _UnimplementedVendorAdapter:
@@ -98,7 +122,7 @@ class SplunkAdapter(_UnimplementedVendorAdapter):
 
 
 def iter_source_adapters() -> tuple[SourceAdapter, ...]:
-    """Every adapter this package is willing to name. Only generic JSON runs."""
+    """Every adapter this package is willing to name."""
     return (
         GenericJsonAdapter(),
         WazuhAdapter(),

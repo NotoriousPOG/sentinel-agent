@@ -4,7 +4,9 @@ import pytest
 from pydantic import ValidationError
 from tests.support import alert_payload
 
+from sentinel.errors import AlertValidationError
 from sentinel.schemas.alerts import NormalizedAlert
+from sentinel.schemas.errors import ValidationCode
 from sentinel.services.sources import GenericJsonAdapter
 
 
@@ -100,9 +102,26 @@ def test_json_roundtrip() -> None:
 
 def test_generic_adapter_rejects_malformed_and_non_objects() -> None:
     adapter = GenericJsonAdapter()
-    with pytest.raises(ValidationError):
+    with pytest.raises(AlertValidationError) as caught:
         adapter.normalize({"title": "missing required fields"})
+    assert any(issue.code is ValidationCode.MISSING_FIELD for issue in caught.value.issues)
     with pytest.raises(TypeError):
         adapter.normalize(["not", "an", "object"])
-    alert = adapter.normalize(alert_payload())
-    assert alert.source == "unit-test"
+    clean = adapter.normalize(alert_payload())
+    assert clean.source == "unit-test"
+    payload = alert_payload(raw_event={"kept": True}, extra_key="nope")
+    alert = GenericJsonAdapter().normalize(payload)
+    assert alert.raw_event == {"kept": True}
+    assert alert.metadata["unmapped_fields"]["extra_key"] == "nope"
+    assert "extra_key" not in alert.model_dump()
+
+
+def test_generic_adapter_keeps_unknown_keys_off_first_class_fields() -> None:
+    payload = alert_payload(ignore_previous_instructions="do something else", vendor_only=1)
+    alert = GenericJsonAdapter().normalize(payload)
+    dumped = alert.model_dump()
+    assert "ignore_previous_instructions" not in dumped
+    assert "vendor_only" not in dumped
+    assert set(dumped) <= set(NormalizedAlert.model_fields)
+    assert alert.raw_event["ignore_previous_instructions"] == "do something else"
+    assert alert.metadata["unmapped_fields"]["vendor_only"] == 1

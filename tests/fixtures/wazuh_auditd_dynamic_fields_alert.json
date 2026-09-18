@@ -1,0 +1,36 @@
+{
+  "rule": {
+    "level": 3,
+    "description": "Auditd: Configuration changed",
+    "id": 80705,
+    "firedtimes": 2,
+    "groups": [
+      "audit",
+      "audit_configuration"
+    ]
+  },
+  "agent": {
+    "id": "000",
+    "name": "wazuh-example"
+  },
+  "manager": {
+    "name": "wazuh-example"
+  },
+  "full_log": "type=CONFIG_CHANGE msg=audit(1486483072.194:20): auid=0 ses=6 op=\"add rule\" key=\"audit-wazuh-a\" list=4 res=1",
+  "audit": {
+    "type": "CONFIG_CHANGE",
+    "id": "20",
+    "auid": "0",
+    "session": "6",
+    "op": "add rule",
+    "key": "audit",
+    "list": "4",
+    "res": "1"
+  },
+  "decoder": {
+    "parent": "auditd",
+    "name": "auditd"
+  },
+  "timestamp": "2017 Feb 07 15:57:53",
+  "location": "/var/log/audit/audit.log"
+}
