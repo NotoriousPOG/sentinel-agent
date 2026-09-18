@@ -1,6 +1,6 @@
 # Implementation plan
 
-Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestone 4 is implemented for the criteria checked below. Milestone 5 is implemented for the criteria checked below. Milestone 6 is implemented for the criteria checked below. Milestone 7 is implemented for the criteria checked below. Milestones 8–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
+Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestone 4 is implemented for the criteria checked below. Milestone 5 is implemented for the criteria checked below. Milestone 6 is implemented for the criteria checked below. Milestone 7 is implemented for the criteria checked below. Milestone 8 is implemented for the criteria checked below. Milestones 9–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
 
 The product pipeline is:
 
@@ -39,14 +39,16 @@ src/sentinel/
   storage/             engine and session factory
   observability/       package marker; instrumentation is milestone 9
   security/            untrusted-field registry (not a detector)
+  evals/               offline runner, scripted model, not a hosted client
   config/              pydantic-settings
 tests/
-evals/README.md        pointer to milestone 8
+evals/README.md        synthetic dataset notice; no copied scores
+evals/dataset.json     labeled synthetic cases
 examples/README.md     pointer only; no sample investigations
 docs/
   architecture.md
   threat-model.md      controls that have a test; not a detector
-  evaluations.md       stub
+  evaluations.md       what the offline runner measures, and what a number is not
   security.md          operator notes tied to tests
   adding-tools.md      how to add a tool without shell or arbitrary HTTP
 .github/workflows/test.yml
@@ -245,14 +247,37 @@ Not done, and not claimed:
 
 ### 8. Evaluations
 
-Synthetic dataset, runner, metrics, CLI.
+Status: done for the criteria below. Milestones 9–10 are not started.
+
+Synthetic dataset, runner, metrics, CLI. The command is the source of the counts. This plan does not copy them.
 
 Acceptance:
 
-- `python -m sentinel.evals run` executes against the mock providers and writes JSON and Markdown under a path the flag selects.
-- Metrics are computed from the dataset (schema pass rate, citation resolution, termination, classification agreement with labels shipped in the dataset). The README does not copy those numbers; the command prints them.
-- The dataset is synthetic and labeled as such in `evals/README.md`.
-- No test or doc invents a detection rate, a benchmark ranking, or a comparison with a vendor product.
+- [x] `python -m sentinel.evals run` executes against the mock providers and writes JSON and Markdown under a path the flag selects (`--output-dir`).
+- [x] Metrics are computed from the dataset (schema pass rate, citation resolution, termination, classification agreement with labels shipped in the dataset). The README does not copy those numbers; the command prints them.
+- [x] The dataset is synthetic and labeled as such in `evals/README.md`.
+- [x] No test or doc invents a detection rate, a benchmark ranking, or a comparison with a vendor product.
+
+Also done:
+
+- The model is `ScriptedEvalModel`. It is not `OpenAiCompatibleClient`. `docs/evaluations.md` says the counts measure this pipeline plus that scripted model, not a hosted model.
+- IP and hash use the `demo_mode` mocks. Their provider names start with `mock:`. The reports say they are not live intelligence.
+- The CVE case uses the public id `CVE-2021-44228` and `OsvIntelligence` with an injected transport. The run does not open a socket.
+- Conflicting intelligence is two `synthetic:` evidence rows passed through `correlate`, `verify_report`, and `score_confidence`. It is not a second vendor response.
+- A failed domain lookup is the missing-intelligence case. The dataset says it must not be classified `BENIGN`. The command exits non-zero if that label is violated.
+- Prompt-injection cases record three counts: system prompt stayed constant, an unknown tool ran, the case reached `COMPLETE` without a review. Those counts are not a resistance percentage. There is still no detector.
+- Schema compliance is the share of cases labeled `expected_report: true` whose stored report validates as `IncidentReport`. The command exits non-zero when that share is not total. CI runs the command and checks the same JSON fields. That is a regression check against the scripted model and those labels, not a classification threshold.
+- `tokens_used` is summed from the investigation state. `estimated_cost_usd` is 0 because no price table is configured and the scripted model does not return a provider usage object. The conflicting case adds 0 tokens because the model is not called.
+- `verify_report` and the confidence formula were not changed.
+
+Not done, and not claimed:
+
+- OpenTelemetry is not installed. `GET /metrics` still returns 501. That is milestone 9.
+- No portfolio walkthrough, screenshots, or demo-alert polish. That is milestone 10. The README status table was updated. Eval counts were not pasted into it.
+- No jailbreak detector and no denylist.
+- No remediation executor, including a stub.
+- Provider backoff, Redis, pgvector, and the OpenAI SDK are still absent.
+- CI does not fail on a classification agreement threshold.
 
 ### 9. Observability
 
@@ -350,6 +375,7 @@ pip install -e ".[dev]"
 ruff check src tests
 mypy src
 pytest
+python -m sentinel.evals run --output-dir evals/out
 bandit -r src -ll
 pip-audit
 ```

@@ -69,6 +69,6 @@ When the text only says to mark the host safe, the model finishes and the narrat
 
 The tests do not show that a production model will refuse hostile text. They show what the executor does when the model complies.
 
-The tests do not show a jailbreak detector, a denylist, HTML sanitization, or a browser XSS control. There is no eval score, no detection rate, and no comparison with another product.
+The tests do not show a jailbreak detector, a denylist, HTML sanitization, or a browser XSS control. They do not report a detection rate or a comparison with another product. The offline runner in `docs/evaluations.md` is a separate measurement of a scripted model. It is not a detector and it does not add one.
 
 `GET /metrics` is still 501. OpenTelemetry is not installed. There is no remediation executor.
