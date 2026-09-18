@@ -1,6 +1,6 @@
 # Implementation plan
 
-Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestone 4 is implemented for the criteria checked below. Milestones 5–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
+Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestone 4 is implemented for the criteria checked below. Milestone 5 is implemented for the criteria checked below. Milestones 6–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
 
 The product pipeline is:
 
@@ -31,6 +31,7 @@ alembic/
 src/sentinel/
   api/                 FastAPI app, health, alert and investigation routes, reserved 501 routes
   agents/              executor, prompt separation, status transitions, budget predicates
+  evidence/            correlation and citation verification; no model call
   models/              SQLAlchemy models for alerts and investigations
   schemas/             Pydantic domain models
   tools/               closed registry and the five tools
@@ -124,7 +125,7 @@ Not done, and not claimed:
 
 ### 4. Agent
 
-Status: done for the criteria below. Milestones 5–10 are not started.
+Status: done for the criteria below. Evidence correlation and verification are milestone 5.
 
 State, tool selection, loop, budgets, retries, termination. Persistence and the investigation routes that call the executor are included because the executor has to be reachable.
 
@@ -143,12 +144,12 @@ Also done in this milestone, because the executor builds prompts and the API has
 - A successful tool phase stops at `VERIFYING`. The executor does not enter `AWAITING_REVIEW` or `COMPLETE`.
 - Provider and LLM transport errors end `FAILED` without incrementing `retries`. Backoff is not implemented.
 - The system prompt is a constant. Alert text, tool results, and rejected model output are in a separate message inside untrusted-data markers. There is no jailbreak detector.
-- `0003_investigations` persists the state. `POST /investigations` runs the executor for a stored alert. `GET /investigations/{id}` reloads it. `GET /investigations/{id}/evidence` returns the stored records and does not correlate them. Report and review stay 501.
+- `0003_investigations` persists the state. `POST /investigations` runs the executor for a stored alert. `GET /investigations/{id}` reloads it. `GET /investigations/{id}/evidence` returned the stored records without correlating them; milestone 5 adds indicator and contradiction links. Report and review stay 501.
 - A thin OpenAI-compatible client implements `LlmProvider` with `httpx2`. Missing base URL, key, or model is `ConfigurationError`. The key is not logged and is not put on an exception or a result. The OpenAI SDK is not a dependency.
 
 Not done, and not claimed:
 
-- Evidence correlation, citation verification, confidence scoring from live evidence, MITRE mapping onto a report, `IncidentReport` generation, analyst review storage.
+- Evidence correlation and citation verification are milestone 5. Confidence scoring from live evidence, MITRE mapping onto a report, `IncidentReport` generation, and analyst review storage were not part of milestone 4.
 - No path from `VERIFYING` back to `INVESTIGATING`. That retry belongs to verification and review, which are later milestones.
 - Provider backoff is not implemented. A provider or LLM transport error fails the investigation instead of trying again.
 - Prompt-injection detection, a fixture corpus, and updates to `docs/threat-model.md` and `docs/security.md` are milestone 7. Separation is not injection resistance.
@@ -157,14 +158,34 @@ Not done, and not claimed:
 
 ### 5. Evidence
 
-Correlation, citations, verification.
+Status: done for the criteria below. Milestones 6–10 are not started.
+
+Correlation, citations, verification. Unit tests use fakes. No network and no live model.
 
 Acceptance:
 
-- Two provider results for the same indicator become two evidence rows linked to one indicator, not a merged blob.
-- A report whose executive summary names an IP absent from the alert and from evidence fails verification.
-- Contradicting evidence is visible on the report, not dropped to keep a clean story.
-- Reliability comes from the tool policy table. A test shows the model cannot set reliability by putting it in free text.
+- [x] Two provider results for the same indicator become two evidence rows linked to one indicator, not a merged blob.
+- [x] A report whose executive summary names an IP absent from the alert and from evidence fails verification.
+- [x] Contradicting evidence is visible on the report, not dropped to keep a clean story.
+- [x] Reliability comes from the tool policy table. A test shows the model cannot set reliability by putting it in free text.
+
+Also done, because the same checks cover the rest of the evidence rules in `docs/architecture.md`:
+
+- Unknown stays unknown. `reported_malicious: null` does not contradict a boolean and does not support `BENIGN`. A failed lookup is not a benign result. A `malicious_count` of 0 without a harmless count is not benign.
+- Conclusions the verifier accepts cite evidence ids that were collected. An id that was not collected fails. Conflicting values are a list of observations. They are not averaged, and `weighted_evidence_v1` is not computed.
+- A fact must name a tool-output field and match that field. `raw` is not a field. An inference presented as a fact fails when no stored field supports it. The same test shows free text and `raw` cannot set reliability.
+- `GET /investigations/{id}/evidence` returns the separate rows, indicator links, and contradiction links. It does not change status.
+- `apply_verification` records the result on the state. A pass stays `VERIFYING`. A failure calls `transition()` to `FAILED` only when `retries >= max_retries`. It does not return to `INVESTIGATING` and does not enter `AWAITING_REVIEW` or `COMPLETE`. The executor's stop rules are unchanged.
+
+Not done, and not claimed:
+
+- `weighted_evidence_v1` booleans are not set from live evidence. That is milestone 6.
+- MITRE techniques are not mapped onto a report. A `search_mitre` row stays evidence. It is not turned into `mitre_attack`.
+- No model generates an `IncidentReport`. The verifier only accepts or rejects an object the caller built.
+- `GET /investigations/{id}/report` and `POST /investigations/{id}/review` stay 501. Nothing moves an investigation to `AWAITING_REVIEW` or `COMPLETE`.
+- Verification does not spend a retry by returning to `INVESTIGATING`. `transition()` still allows that edge. This milestone does not call it.
+- No jailbreak detector, eval runner, OpenTelemetry, or remediation executor.
+- Mock providers are still the milestone 3 mocks. Their names still start with `mock:`. This milestone does not invent threat-intelligence results.
 
 ### 6. Reporting
 
