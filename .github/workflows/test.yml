@@ -45,3 +45,15 @@ jobs:
         run: mypy src/sentinel
       - name: Test
         run: pytest
+      - name: Offline evaluations
+        run: |
+          python -m sentinel.evals run --output-dir evals/out
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("evals/out/report.json").read_text(encoding="utf-8"))
+          schema = report["metrics"]["schema_compliance"]
+          if schema["denominator"] < 1 or schema["numerator"] != schema["denominator"]:
+              raise SystemExit("schema compliance is not total")
+          PY
