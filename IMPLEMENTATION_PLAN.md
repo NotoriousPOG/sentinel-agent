@@ -1,6 +1,6 @@
 # Implementation plan
 
-Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestone 4 is implemented for the criteria checked below. Milestone 5 is implemented for the criteria checked below. Milestone 6 is implemented for the criteria checked below. Milestones 7–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
+Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestone 4 is implemented for the criteria checked below. Milestone 5 is implemented for the criteria checked below. Milestone 6 is implemented for the criteria checked below. Milestone 7 is implemented for the criteria checked below. Milestones 8–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
 
 The product pipeline is:
 
@@ -45,9 +45,9 @@ evals/README.md        pointer to milestone 8
 examples/README.md     pointer only; no sample investigations
 docs/
   architecture.md
-  threat-model.md      stub
+  threat-model.md      controls that have a test; not a detector
   evaluations.md       stub
-  security.md          stub
+  security.md          operator notes tied to tests
   adding-tools.md      how to add a tool without shell or arbitrary HTTP
 .github/workflows/test.yml
 .github/workflows/security.yml
@@ -217,14 +217,31 @@ Not done, and not claimed:
 
 ### 7. AI security
 
-Prompt-injection defenses, tool authorization, input isolation, security tests.
+Status: done for the criteria below. Milestones 8–10 are not started.
+
+Prompt-injection tests, tool authorization, input isolation. The control is separation plus the closed tool set. There is no detector and no denylist.
 
 Acceptance:
 
-- A fixture corpus of alert bodies (instruction overrides, fake tool calls, HTML, long Unicode) is run through normalization and a fake model. None of them add a tool, change the system prompt, or pass schema validation as a tool call unless they are inside the tool-argument channel.
-- System prompt construction asserts that untrusted fields appear only inside the data delimiters.
-- Tests cover the five untrusted categories named in the product spec: logs, usernames, URLs, domains, process arguments, plus TI `raw`.
-- `docs/threat-model.md` and `docs/security.md` are updated from stubs to match the tests. Claims that do not have a test are deleted.
+- [x] A fixture corpus of alert bodies (instruction overrides, fake tool calls, HTML, long Unicode) is run through normalization and a fake model. None of them add a tool, change the system prompt, or pass schema validation as a tool call unless they are inside the tool-argument channel.
+- [x] System prompt construction asserts that untrusted fields appear only inside the data delimiters.
+- [x] Tests cover the five untrusted categories named in the product spec: logs, usernames, URLs, domains, process arguments, plus TI `raw`.
+- [x] `docs/threat-model.md` and `docs/security.md` are updated from stubs to match the tests. Claims that do not have a test are deleted.
+
+Also done:
+
+- The fake model follows the payload, including `exec`, `run_shell`, and `fetch_url`. Those decisions are unknown-tool failures and do not call a provider. `ModelTurn` still accepts the name; the registry rejects it.
+- A tool `raw` blob that says to mark the host safe or to call a shell does not add a shell tool, fetch a URL, or set classification. Confidence remains `score_confidence`. `COMPLETE` remains an approved review.
+- `verify_report`, the confidence formula, and the review rules were not changed. No remediation executor was added.
+
+Not done, and not claimed:
+
+- No jailbreak detector and no denylist. The tests do not treat either as the control, and they do not report a detection rate.
+- No eval runner and no benchmark numbers. That is milestone 8.
+- OpenTelemetry is not installed. `GET /metrics` still returns 501. That is milestone 9.
+- No portfolio walkthrough, screenshots, or demo-alert polish. That is milestone 10. The README status table was updated to match this milestone.
+- No remediation executor, including a stub.
+- Provider backoff, Redis, pgvector, and the OpenAI SDK are still absent.
 
 ### 8. Evaluations
 

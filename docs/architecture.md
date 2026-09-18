@@ -191,7 +191,7 @@ Structural controls, which this design treats as primary:
 - `extra=forbid` drops the common trick of an extra JSON field that a loose mapper would copy into a prompt or a tool argument.
 - Provider `raw` is stored, not passed to `eval`, YAML load, or a template engine.
 
-What this does not do, and must not be described as doing: detect jailbreaks, strip "ignore previous instructions," or sanitize HTML. Those are milestone 7, they are incomplete even when built, and a regex denylist is the wrong core control. Input isolation plus a closed tool set is the core control.
+What this does not do, and must not be described as doing: detect jailbreaks, strip "ignore previous instructions," or sanitize HTML. Milestone 7 tests separation and the closed tool set. It does not add a detector or a denylist. A regex denylist is the wrong core control. Input isolation plus a closed tool set is the core control.
 
 `NewType` wrappers are not used. They disappear at runtime and create a false sense of a boundary. The boundary is the message channel and the tool schema.
 
@@ -260,3 +260,10 @@ The executor still stops at `VERIFYING`. `apply_verification` records the result
 `finalize_investigation` validates the assembled `IncidentReport`. Schema failure uses `max_repair_attempts`, then `FAILED`. It calls `verify_report` before storing anything. A rejected report is not stored, and the investigation ends `FAILED` with the verifier codes. The verifier was not weakened. A verified report is stored, then `transition()` moves the state to `AWAITING_REVIEW`. The generator does not enter `COMPLETE`.
 
 `POST /investigations/{id}/review` persists an `AnalystReview`. Notes are required. Extra fields such as `execute` and `auto_remediate` fail validation. Approving the conclusion is the only path to `COMPLETE`. Rejection records the decision and moves to `FAILED`. It does not return to `INVESTIGATING`. Approving remediation writes the field and calls nothing else. There is no remediation executor. `GET /investigations/{id}/report` returns the stored verified report, or 404 when there is none. `GET /metrics` is still 501.
+
+## What milestone 7 adds
+
+Tests, not a detector. `tests/test_prompt_injection.py` runs a corpus of hostile alert bodies through normalization and `run_investigation`. The fake model follows instructions in the data channel. The executor still refuses `exec`, `run_shell`, and `fetch_url`, does not call a provider for those names, and does not copy alert text or tool `raw` into the system prompt constants. Classification stays `classification_from_evidence`. Confidence stays `score_confidence`. `COMPLETE` is still only an approved review.
+
+`docs/threat-model.md` and `docs/security.md` list the claims those tests check. They do not say the system detects prompt injection. No denylist was added. `verify_report`, the confidence formula, and the review rules were not changed. There is still no remediation executor.
+

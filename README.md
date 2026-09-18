@@ -20,7 +20,7 @@ This repository stores normalized alerts, looks up indicators through a closed s
 | `GET /metrics` | Reserved. Returns 501. No metrics payload |
 | LLM client | OpenAI-compatible HTTP client behind `LlmProvider`, using `httpx2`. No OpenAI SDK. Missing base URL, key, or model is a configuration error. The key is not logged. Tests use a fake transport or an in-process model |
 | Agent loop | Calls `transition()` and the budget predicates. Tool calls go through `ToolRegistry`. The tool phase ends at `VERIFYING`. A verified report then moves to `AWAITING_REVIEW`. `COMPLETE` happens only when an analyst approves the conclusion |
-| Prompt separation | System prompt is a constant. The report prompt is a separate constant. Alert text, tool results, evidence, and rejected model output go in a separate message inside untrusted-data markers. Not a jailbreak detector |
+| Prompt separation | System prompt is a constant. The report prompt is a separate constant. Alert text, tool results, evidence, and rejected model output go in a separate message inside untrusted-data markers. A hostile corpus is tested with a fake model that follows the payload. Not a jailbreak detector |
 | Evidence correlation | Present. Two provider rows for one indicator stay two rows. A disagreeing value is listed, not dropped |
 | Citation verification | Present as a pure function. It does not call a model and does not score confidence. The generator stores a report only when this function accepts it |
 | Confidence scoring | `weighted_evidence_v1`. `satisfied` is set from evidence. The model does not choose the percentage. One low-reliability source cannot score 100 |
@@ -37,7 +37,8 @@ This repository stores normalized alerts, looks up indicators through a closed s
 | MITRE ATT&CK | Local subset of Enterprise 19.2. Source and retrieval date are in `src/sentinel/data/attack/README.md`. Not the full catalog |
 | DNS | Resolver with a timeout. Tests inject the resolver. The domain is not fetched over HTTP |
 | `demo_mode` | Selects mock IP and hash providers tagged `mock:`. Does not start an investigation by itself, and does not replace a failed live call |
-| Prompt-injection detection, evals, tracing, remediation | Not implemented. Prompt separation above is not a detector |
+| Prompt injection | Not a detector. Hostile alert text stays inside the data markers. `exec`, `run_shell`, and `fetch_url` fail closed and do not call a provider. Classification, confidence, and review do not follow alert text |
+| Evals, tracing, remediation | Not implemented. No benchmark numbers. `GET /metrics` is still 501. No remediation executor |
 
 There are no benchmark numbers because nothing has been measured.
 
