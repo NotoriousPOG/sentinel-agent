@@ -1,7 +1,7 @@
 """Security boundaries.
 
-Runtime prompt-injection defenses are milestone 7. See ``untrusted.py`` for the
-field registry that those defenses must honor, and ``docs/architecture.md`` for
-the structural controls that already apply (no shell tool, no arbitrary URL
-tool, schema rejection of unknown keys).
+See ``untrusted.py`` for the field list tests keep complete, and
+``docs/architecture.md`` for the controls that are actually implemented:
+message separation, a closed tool set, no shell tool, and no arbitrary URL
+tool. This package does not detect jailbreaks.
 """

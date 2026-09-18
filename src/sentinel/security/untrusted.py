@@ -1,8 +1,8 @@
 """Fields that must be treated as data, never as instructions.
 
 This registry is a tripwire for reviewers and tests. It does not sanitize,
-detect jailbreaks, or wrap a prompt. Those controls are milestone 7, and they
-depend on this list staying complete.
+detect jailbreaks, or wrap a prompt. Prompt construction keeps these fields
+inside data markers. The registry does not decide that; tests do.
 """
 
 UNTRUSTED_ALERT_FIELDS: frozenset[str] = frozenset(

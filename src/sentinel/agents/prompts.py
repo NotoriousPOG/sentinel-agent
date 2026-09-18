@@ -2,8 +2,9 @@
 
 The system prompt is a module constant. Alert fields, tool results, and raw
 model text are not interpolated into it. They go in a separate user message,
-inside the markers below. This file does not detect jailbreaks and does not
-strip instructions. That is milestone 7. The control here is separation only.
+inside the markers below. This file does not detect jailbreaks, strip
+instructions, or sanitize HTML. The control is this separation. The closed
+tool set is the other half, in ``tools/registry.py``.
 """
 
 import json

@@ -22,8 +22,8 @@ class LlmRole(StrEnum):
 class LlmMessage(BaseModel):
     """One chat message.
 
-    Untrusted alert text must not be placed in ``SYSTEM``. Milestone 7 enforces
-    that when a prompt builder exists. This model only stores the role.
+    Untrusted alert text must not be placed in ``SYSTEM``. The prompt builder
+    keeps that text in a user message. This model only stores the role.
     """
 
     model_config = ConfigDict(extra="forbid")

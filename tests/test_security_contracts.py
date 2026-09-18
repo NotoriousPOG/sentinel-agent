@@ -1,6 +1,7 @@
 """Contracts that keep secrets and untrusted fields from drifting.
 
-These are not a prompt-injection detector. Milestone 7 adds that.
+These are not a prompt-injection detector. The injection tests are in
+``test_prompt_injection.py``. They check separation and the closed tool set.
 """
 
 import pytest
