@@ -1,1 +1,1 @@
-"""State-machine guards. The loop that calls them is milestone 4."""
+"""Investigation executor, prompts, and the guards the executor calls."""

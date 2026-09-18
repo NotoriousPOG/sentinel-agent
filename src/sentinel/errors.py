@@ -97,6 +97,51 @@ class ProviderError(SentinelError):
         super().__init__(f"{provider} lookup failed: {reason}")
 
 
+class InvestigationNotFound(SentinelError):
+    """No stored investigation uses this id. The id is not repeated in the message."""
+
+    def __init__(self) -> None:
+        super().__init__("investigation was not found")
+
+
+class ModelOutputInvalid(SentinelError):
+    """The model text is not an instance of the response model.
+
+    ``detail`` is validator text we produced. ``raw_text`` is the model output
+    and is data, not an instruction. Neither field is a place for an API key.
+    The exception message itself carries neither value.
+    """
+
+    def __init__(self, *, raw_text: str, detail: str) -> None:
+        self.raw_text = raw_text[:20_000]
+        cleaned = detail.strip()[:2000]
+        self.detail = cleaned or "response did not match the required schema"
+        super().__init__("model output failed schema validation")
+
+
+class LlmTransportError(SentinelError):
+    """The model endpoint failed before a usable completion.
+
+    This is not an investigation retry and it is not a schema repair.
+    ``reason`` is a short token. The exception message does not include it,
+    so a transport library's text cannot ride along.
+    """
+
+    def __init__(self, reason: str) -> None:
+        self.reason = _llm_reason(reason)
+        super().__init__("llm transport failed")
+
+
+def _llm_reason(reason: str) -> str:
+    token = reason.strip()
+    if token in {"timeout", "transport", "invalid_response"}:
+        return token
+    suffix = token.removeprefix("http_")
+    if token.startswith("http_") and suffix.isdigit():
+        return token
+    return "transport"
+
+
 def prefix_issues(issues: Sequence[FieldIssue], prefix: str) -> tuple[FieldIssue, ...]:
     """Qualify field paths so API errors point at the request body."""
     return tuple(FieldIssue(code=issue.code, field=f"{prefix}.{issue.field}") for issue in issues)

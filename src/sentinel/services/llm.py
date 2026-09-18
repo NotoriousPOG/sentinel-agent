@@ -1,4 +1,8 @@
-"""LLM port. No provider is implemented and no SDK is imported."""
+"""LLM port.
+
+``OpenAiCompatibleClient`` in ``llm_http.py`` is the HTTP implementation.
+It is not imported here. The OpenAI SDK is not a dependency.
+"""
 
 from collections.abc import Sequence
 from enum import StrEnum
@@ -36,5 +40,10 @@ class LlmProvider(Protocol):
         messages: Sequence[LlmMessage],
         response_model: type[ModelT],
     ) -> ModelT:
-        """Return a validated model. No implementation ships in milestone 1."""
+        """Return ``response_model`` or raise.
+
+        Schema failure is ``ModelOutputInvalid``. Transport failure is
+        ``LlmTransportError``. A dict left for a later validator is not a
+        valid implementation.
+        """
         ...
