@@ -1,6 +1,6 @@
 # Sentinel Agent architecture
 
-Sentinel Agent investigates a single security alert and produces a structured incident report for a human analyst. This document records the control-plane decisions for that pipeline and the tradeoffs behind them. It describes the system we are building. It does not describe features that already run. Milestone 1 ships typed contracts, configuration, a FastAPI skeleton, and database wiring. The agent loop, tools, and report generator do not exist yet.
+Sentinel Agent investigates a single security alert and produces a structured incident report for a human analyst. This document records the control-plane decisions for that pipeline and the tradeoffs behind them. It describes the system we are building. Milestone 1 shipped typed contracts, configuration, a FastAPI skeleton, and database wiring. Milestone 2 stores a normalized alert. The agent loop, tools, and report generator do not exist yet.
 
 The pipeline, once later milestones land, is:
 
@@ -153,9 +153,13 @@ Two ports, no implementations:
 - `LlmProvider` in `services/llm.py`. An OpenAI-compatible HTTP client is the likely first implementation. The OpenAI SDK is not a dependency. The port does not need it, and adding it now would suggest a live client exists.
 - `ThreatIntelProvider` in `services/threat_intel.py`. AbuseIPDB, VirusTotal, NVD, and OSV are future adapters behind this port. Keys, if later configured, are `SecretStr` settings. They must not be logged, placed in `raw`, or copied onto a report. No provider key is read by any current code path beyond loading settings.
 
-Source adapters are a third port. `GenericJsonAdapter` validates the normalized alert shape and returns it. That is the schema, not ingestion: nothing is stored, and `POST /alerts` still returns 501 after a valid body. `WazuhAdapter` validates a minimal real Wazuh envelope (`timestamp`, `rule.level`, `rule.description`, `rule.id`, `agent.id`, `agent.name`) and then raises `NotImplementedCapability`. Mapping Wazuh into `NormalizedAlert` is milestone 2. Pretending a 20-line mapper was production parsing would skip the ugly fields (`full_log`, `data`, decoder-specific Windows/Sysmon shapes) that actually break normalization.
+Source adapters are a third port. `GenericJsonAdapter` maps a JSON object onto `NormalizedAlert`. Keys that are not fields of that model are copied onto `raw_event` when the caller did not supply one, and listed under `metadata.unmapped_fields`. They are not promoted to first-class fields. `NormalizedAlert` itself still rejects unknown keys (`extra=forbid`); the split happens in the adapter, not by loosening the model.
 
-`CrowdStrikeFalconAdapter`, `GuardDutyAdapter`, `DefenderAdapter`, `ElasticAdapter`, and `SplunkAdapter` are concrete classes whose only behavior is to raise. They are interfaces with a name you can import, not integrations. No payload fixtures are shipped for them, because a fixture would imply we had specified a vendor contract we have not tested against vendor documentation in this milestone.
+`WazuhAdapter` maps the alert object Wazuh documents, not a guessed schema. The fixture is the logtest `data.output` object from [testing a rule](https://documentation.wazuh.com/current/user-manual/ruleset/testing.html), plus the older JSON object on [dynamic fields](https://documentation.wazuh.com/current/user-manual/ruleset/decoders/dynamic-fields.html) which has a numeric `rule.id`, an offset-less timestamp, and no top-level `id`. Static decoder names the mapper reads (`srcip`, `dstip`, `srcuser`, `dstuser`, `user`, `url`) are the ones Wazuh lists as [static fields](https://documentation.wazuh.com/current/user-manual/ruleset/ruleset-xml-syntax/decoders.html). `full_log` is preserved on `raw_event` and is not copied into `command_line`. MITRE ids, ports, and dynamic objects such as `audit` stay on `raw_event`. A missing `rule` or a missing top-level `id` fails closed; the adapter does not invent an `alert_id`. Severity bands are Sentinel's mapping of Wazuh's documented 0–15 levels, not names Wazuh defines. There is no Wazuh manager client.
+
+`POST /alerts` accepts `{"source": "generic_json" | "wazuh", "payload": {...}}`, stores the normalized document, and returns it. The same `alert_id` is idempotent: the first write wins, and a later body does not replace it. `GET /alerts/{id}` reloads that row. Validation failures use `missing_field`, `invalid_field`, `invalid_type`, or `unknown_source`, and do not echo the submitted value. A missing id is `alert_not_found`. Windows and Sysmon decoder shapes are not parsed into first-class fields.
+
+`CrowdStrikeFalconAdapter`, `GuardDutyAdapter`, `DefenderAdapter`, `ElasticAdapter`, and `SplunkAdapter` are concrete classes whose only behavior is to raise. They are interfaces with a name you can import, not integrations. No payload fixtures are shipped for them, because a fixture would imply we had specified a vendor contract we have not tested against vendor documentation.
 
 ## Prompt injection
 
@@ -182,9 +186,9 @@ When instrumentation arrives, the rules are: one investigation id as the correla
 
 ## Persistence
 
-PostgreSQL is the system of record for anything that must survive a process restart. SQLAlchemy 2.x and Alembic are wired. There are no tables yet. The initial revision is an empty marker so `alembic upgrade head` is a real command rather than an uninitialized tree. Alert and investigation tables arrive with the code that writes them (milestones 2 and 4), not as unused schema.
+PostgreSQL is the system of record for anything that must survive a process restart. SQLAlchemy 2.x and Alembic are wired. Revision `0002_alerts` creates the `alerts` table: `alert_id` (primary key), `source`, `received_at`, and `document` (portable JSON, not JSONB, so the same revision applies on SQLite). Investigation tables are still absent; they arrive with the code that writes them.
 
-Unit tests use SQLite through the same engine factory. SQLite is not a supported deployment. It ignores the locking and migration behavior we care about in PostgreSQL; it only keeps the suite runnable without a daemon. Docker Compose runs PostgreSQL 16 for local development.
+`POST /alerts` and `GET /alerts/{id}` read and write that table. The API does not open a database connection at import time. `GET /health` still does not touch the database. Unit tests migrate a temporary SQLite file. A separate test uses `SENTINEL_TEST_DATABASE_URL` and is what GitHub Actions runs against a PostgreSQL 16 service. If that variable is unset in GitHub Actions the test fails rather than skipping. SQLite is not a supported deployment. Docker Compose runs PostgreSQL 16 for local development and applies `alembic upgrade head` before serving.
 
 Alembic lives at the repository root (`alembic.ini`, `alembic/`) rather than under `src/sentinel/storage/`. That is the layout Alembic's own documentation and `alembic upgrade` assume. Moving it inside the package would require a custom `script_location` and would mix migration scripts with importable application code. The ORM base class stays in `src/sentinel/models/`.
 
@@ -206,4 +210,8 @@ Pydantic models live in `schemas/`. SQLAlchemy models will live in `models/`. Sh
 
 ## What milestone 1 actually contains
 
-Typed domain models, the transition and budget functions, source-adapter interfaces, provider protocols, settings, `GET /health`, reserved routes that return 501, an empty Alembic tree, Docker Compose for the API plus PostgreSQL, and tests that do not need network credentials. No investigation runs. No external security service is contacted. No benchmark number exists.
+Typed domain models, the transition and budget functions, source-adapter interfaces, provider protocols, settings, `GET /health`, reserved routes that return 501, an Alembic baseline, Docker Compose for the API plus PostgreSQL, and tests that do not need network credentials. No investigation runs. No external security service is contacted. No benchmark number exists.
+
+## What milestone 2 adds
+
+Wazuh and generic JSON normalization, stable validation error codes, the `alerts` table, and `POST /alerts` / `GET /alerts/{id}`. Replay of an `alert_id` is idempotent. Vendor adapters other than Wazuh still raise. `demo_mode` still does not create mock threat-intel results. Tools, the agent loop, reports, review storage, prompt-injection runtime defenses, evals, tracing, and any remediation executor are not in this release.

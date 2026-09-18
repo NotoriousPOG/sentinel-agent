@@ -38,25 +38,35 @@ def test_openapi_lists_product_routes(client: TestClient) -> None:
 def test_malformed_alert_is_rejected(client: TestClient) -> None:
     response = client.post("/alerts", json={"title": "missing required fields"})
     assert response.status_code == 422
+    body = response.json()
+    assert body["error"] == "validation_error"
+    codes = {item["code"] for item in body["errors"]}
+    assert "missing_field" in codes
+    assert "input" not in response.text
 
 
-def test_valid_alert_is_not_stored(client: TestClient) -> None:
-    response = client.post(
+def test_valid_alert_is_stored_and_reloaded(client: TestClient) -> None:
+    created = client.post(
         "/alerts",
         json={
-            "alert_id": "alert-1",
-            "timestamp": "2026-09-18T12:00:00Z",
-            "source": "unit-test",
+            "source": "generic_json",
+            "payload": {
+                "alert_id": "alert-1",
+                "timestamp": "2026-09-18T12:00:00Z",
+                "source": "unit-test",
+            },
         },
     )
-    assert response.status_code == 501
-    assert response.json()["error"] == "not_implemented"
-    assert response.json()["milestone"] == 2
+    assert created.status_code == 201
+    assert created.json()["idempotent_replay"] is False
+    assert created.json()["alert"]["alert_id"] == "alert-1"
+    loaded = client.get("/alerts/alert-1")
+    assert loaded.status_code == 200
+    assert loaded.json()["alert"]["source"] == "unit-test"
 
 
 def test_reserved_routes_return_501(client: TestClient) -> None:
     cases = [
-        ("get", "/alerts/abc", None),
         ("post", "/investigations", {"alert_id": "alert-1"}),
         ("get", "/investigations/abc", None),
         ("get", "/investigations/abc/evidence", None),

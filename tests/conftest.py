@@ -1,8 +1,11 @@
 """Shared fixtures. The settings cache is cleared so tests do not leak env vars."""
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from sentinel.api.app import app
@@ -17,6 +20,11 @@ def _reset_settings() -> Iterator[None]:
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
+def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    """HTTP client bound to a migrated SQLite file. This is not the PostgreSQL test."""
+    url = f"sqlite+pysqlite:///{tmp_path}/sentinel.db"
+    monkeypatch.setenv("SENTINEL_DATABASE_URL", url)
+    get_settings.cache_clear()
+    command.upgrade(Config("alembic.ini"), "head")
     with TestClient(app) as test_client:
         yield test_client

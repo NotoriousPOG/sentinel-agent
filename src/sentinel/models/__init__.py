@@ -1,5 +1,6 @@
-"""ORM package. Currently only the declarative base."""
+"""ORM package."""
 
+from sentinel.models.alert import AlertRecord
 from sentinel.models.base import Base
 
-__all__ = ["Base"]
+__all__ = ["AlertRecord", "Base"]

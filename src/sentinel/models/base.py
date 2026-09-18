@@ -1,11 +1,11 @@
 """SQLAlchemy models.
 
-No tables yet. Alert and investigation tables land with the code that writes
-them (milestones 2 and 4).
+Alert rows live in ``models/alert.py``. Investigation tables are milestone 4
+and are not created here.
 """
 
 from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
-    """Declarative base for future ORM models."""
+    """Declarative base for ORM models."""

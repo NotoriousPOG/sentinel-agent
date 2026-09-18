@@ -27,7 +27,7 @@ alembic/
   env.py
   versions/0001_initial.py
 src/sentinel/
-  api/                 FastAPI app, health, reserved 501 routes
+  api/                 FastAPI app, health, alert routes, reserved 501 routes
   agents/              status transitions and budget predicates (no loop yet)
   models/              SQLAlchemy declarative base (no tables yet)
   schemas/             Pydantic domain models
@@ -66,8 +66,8 @@ Structure, configuration, domain schemas, FastAPI skeleton, database wiring, tes
 Acceptance:
 
 - `pytest` passes with no API keys and no running PostgreSQL.
-- `GET /health` returns 200. Reserved product routes exist and return 501. They do not create investigations.
-- Malformed alerts fail Pydantic validation. A valid alert posted to `POST /alerts` still returns 501 and is not stored.
+- `GET /health` returns 200. Reserved product routes exist. Investigation, review, and metrics routes return 501. They do not create investigations. Milestone 2 replaced the 501 response for alert routes.
+- Malformed alerts fail validation. Milestone 1 left a valid `POST /alerts` at 501. Milestone 2 stores a valid alert.
 - Illegal investigation transitions and exhausted retries raise. Terminal statuses have no exits.
 - `IncidentReport` rejects dangling evidence ids and rejects a confidence score that does not match `weighted_evidence_v1`.
 - `alembic upgrade head` applies against SQLite in the test suite. Compose is the PostgreSQL path.
@@ -76,15 +76,26 @@ Acceptance:
 
 ### 2. Alert pipeline
 
+Status: done for the criteria below. Milestones 3–10 are not started.
+
 Generic JSON beyond the identity mapping, Wazuh normalization, validation errors with stable codes, persistence.
 
 Acceptance:
 
-- A Wazuh fixture drawn from Wazuh's documented alert shape normalizes into `NormalizedAlert`, including `full_log` preserved on `raw_event`, and a second fixture with a missing `rule` fails closed.
-- Generic JSON unknown keys are preserved on `raw_event` or `metadata` and are not promoted to first-class fields.
-- `POST /alerts` and `GET /alerts/{id}` persist and reload via PostgreSQL. SQLite remains test-only.
-- Replay of the same `alert_id` is idempotent.
-- Tests do not require a live Wazuh manager.
+- [x] A Wazuh fixture drawn from Wazuh's documented alert shape normalizes into `NormalizedAlert`, including `full_log` preserved on `raw_event`, and a second fixture with a missing `rule` fails closed.
+- [x] Generic JSON unknown keys are preserved on `raw_event` or `metadata` and are not promoted to first-class fields.
+- [x] `POST /alerts` and `GET /alerts/{id}` persist and reload. Unit tests use SQLite. `tests/test_alert_postgres.py` uses PostgreSQL when `SENTINEL_TEST_DATABASE_URL` is set. GitHub Actions sets that URL and starts PostgreSQL 16. If the variable is missing in GitHub Actions the test fails instead of skipping. On a machine without the variable, pytest skips that one test and prints why.
+- [x] Replay of the same `alert_id` is idempotent. The first write wins; a different body does not replace the stored alert.
+- [x] Validation errors use stable codes: `missing_field`, `invalid_field`, `invalid_type`, `unknown_source`. A missing alert is `alert_not_found`.
+- [x] Tests do not require a live Wazuh manager.
+
+Not done, and not claimed:
+
+- Dynamic decoder fields and Windows/Sysmon shapes are not mapped to first-class fields. They remain on `raw_event`.
+- The 2017 dynamic-fields JSON example has no top-level `id`. Normalization fails closed instead of inventing an `alert_id`.
+- No Wazuh manager client.
+- CrowdStrike, GuardDuty, Defender, Elastic, and Splunk still raise and have no fixtures.
+- Tools, the agent loop, report generation, review storage, prompt-injection runtime defenses, evals, tracing, and remediation execution are later milestones.
 
 ### 3. Tool system
 

@@ -20,5 +20,5 @@ USER sentinel
 EXPOSE 8091
 
 # Bind all interfaces inside the container network namespace only.
-# Compose publishes the port on 127.0.0.1. Alembic applies the empty baseline.
+# Compose publishes the port on 127.0.0.1. Alembic applies migrations, including alerts.
 CMD ["sh", "-c", "alembic upgrade head && exec uvicorn sentinel.api.app:app --host 0.0.0.0 --port 8091"]

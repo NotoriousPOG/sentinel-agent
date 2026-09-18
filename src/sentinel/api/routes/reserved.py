@@ -3,25 +3,10 @@
 from fastapi import APIRouter
 
 from sentinel.api.errors import NotImplementedBody, not_implemented
-from sentinel.schemas.alerts import NormalizedAlert
 from sentinel.schemas.investigation import CreateInvestigationRequest
 from sentinel.schemas.review import AnalystReview
 
 router = APIRouter(tags=["reserved"])
-
-
-@router.post("/alerts", response_model=NotImplementedBody, status_code=501)
-def create_alert(alert: NormalizedAlert) -> NotImplementedBody:
-    """Validate a normalized alert and refuse to store it."""
-    _ = alert
-    return not_implemented(2, "Alert ingestion is not implemented.")
-
-
-@router.get("/alerts/{id}", response_model=NotImplementedBody, status_code=501)
-def get_alert(id: str) -> NotImplementedBody:
-    """Alert lookup is not implemented. The id is not resolved."""
-    _ = id
-    return not_implemented(2, "Alert retrieval is not implemented.")
 
 
 @router.post("/investigations", response_model=NotImplementedBody, status_code=501)

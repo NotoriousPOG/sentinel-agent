@@ -8,6 +8,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+import sentinel.models  # noqa: F401  # registers AlertRecord on Base.metadata
 from sentinel.config.settings import get_settings
 from sentinel.models.base import Base
 
