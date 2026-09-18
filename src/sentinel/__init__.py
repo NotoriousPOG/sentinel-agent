@@ -1,7 +1,7 @@
 """Sentinel Agent.
 
-Milestone 1 is a foundation: typed contracts, configuration, and a health
-endpoint. It does not investigate alerts.
+The package validates alerts, stores them, and looks up indicators through a
+closed tool set. It does not run an investigation.
 """
 
 from importlib.metadata import PackageNotFoundError, version

@@ -1,7 +1,7 @@
 """Tool port.
 
-The registry and the five tool implementations are milestone 3.
-Importing this package does not register a tool and does not perform I/O.
+The closed registry lives in ``registry.py``. Importing this package does not
+perform I/O and does not select a mock provider.
 """
 
 from sentinel.tools.base import SecurityTool

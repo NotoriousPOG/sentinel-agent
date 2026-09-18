@@ -1,7 +1,7 @@
 """Process configuration from ``SENTINEL_*`` environment variables.
 
-No credential has a default. Fields reserved for later milestones are loaded
-so they stay ``SecretStr`` values, but no client reads them in this release.
+No credential has a default. Provider clients read ``SecretStr`` values only
+to build a request header, and they must not copy those values into results.
 """
 
 from functools import lru_cache
@@ -16,9 +16,9 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 class Settings(BaseSettings):
     """Runtime settings.
 
-    Consumed in milestone 1: ``database_url``, ``log_level``, ``demo_mode``.
-    ``demo_mode`` is readable and changes nothing else. Mock providers do not
-    exist yet.
+    ``demo_mode`` selects mock IP and hash providers when a tool registry is
+    built. It does not start an investigation, and it is not a fallback for a
+    failed live lookup. CVE, MITRE, and DNS ignore the flag.
     """
 
     model_config = SettingsConfigDict(
@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr | None = None
     llm_model: str | None = None
 
+    abuseipdb_api_key: SecretStr | None = None
+    virustotal_api_key: SecretStr | None = None
+    provider_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+
     max_tool_calls: int = Field(default=8, ge=1, le=32)
     max_retries: int = Field(default=2, ge=0, le=5)
     max_repair_attempts: int = Field(default=1, ge=0, le=3)
@@ -52,12 +56,32 @@ class Settings(BaseSettings):
             raise ValueError("database_url must be a sqlite or postgresql SQLAlchemy URL")
         return stripped
 
-    @field_validator("llm_base_url", "llm_api_key", "llm_model", mode="before")
+    @field_validator(
+        "llm_base_url",
+        "llm_api_key",
+        "llm_model",
+        "abuseipdb_api_key",
+        "virustotal_api_key",
+        mode="before",
+    )
     @classmethod
     def _blank_optional(cls, value: object) -> object:
         if value == "":
             return None
         return value
+
+
+def configured_secret(value: SecretStr | None) -> str | None:
+    """Return the secret text, or None when the setting is missing or blank.
+
+    Callers must not log the return value.
+    """
+    if value is None:
+        return None
+    text = value.get_secret_value()
+    if not text.strip():
+        return None
+    return text
 
 
 @lru_cache(maxsize=1)

@@ -72,6 +72,31 @@ class AlertNotFound(SentinelError):
         super().__init__("alert was not found")
 
 
+class UnknownTool(SentinelError):
+    """The tool name is not in the closed set. There is no default tool."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name[:64]
+        super().__init__("unknown tool")
+
+
+class ConfigurationError(SentinelError):
+    """A provider has no credential. This is not a benign verdict."""
+
+    def __init__(self, provider: str) -> None:
+        self.provider = provider
+        super().__init__(f"{provider} is not configured")
+
+
+class ProviderError(SentinelError):
+    """A lookup failed or timed out. ``reason`` is a token, not a response body."""
+
+    def __init__(self, provider: str, reason: str) -> None:
+        self.provider = provider
+        self.reason = reason
+        super().__init__(f"{provider} lookup failed: {reason}")
+
+
 def prefix_issues(issues: Sequence[FieldIssue], prefix: str) -> tuple[FieldIssue, ...]:
     """Qualify field paths so API errors point at the request body."""
     return tuple(FieldIssue(code=issue.code, field=f"{prefix}.{issue.field}") for issue in issues)

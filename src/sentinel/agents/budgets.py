@@ -36,7 +36,11 @@ def assert_can_spend_tokens(state: InvestigationState, requested: int) -> None:
 
 
 def tool_call_key(tool: str, arguments: Mapping[str, object]) -> str:
-    """Stable id for one tool name plus JSON arguments. Not a cache."""
+    """Stable id for one tool name plus JSON arguments.
+
+    ``ToolRegistry`` reuses a stored result when this key repeats. This
+    function does not store anything and does not call a provider.
+    """
     if not tool.strip():
         raise ValueError("tool name must be non-empty")
     payload = {"arguments": _json_value(dict(arguments)), "tool": tool}

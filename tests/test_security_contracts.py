@@ -44,3 +44,52 @@ def test_settings_read_budget_overrides(monkeypatch: pytest.MonkeyPatch) -> None
     assert settings.max_tool_calls == 3
     assert settings.demo_mode is False
     assert settings.llm_api_key is None
+
+
+def test_provider_key_is_absent_from_tool_result_and_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """A configured VirusTotal key must not be copied into a result or a log line."""
+    from sentinel.services.http import HttpResult
+    from sentinel.tools.registry import build_registry
+
+    key = "vt-configured-key-not-for-logs"
+    digest = "ab" * 32
+
+    class Transport:
+        def request(
+            self,
+            method: str,
+            url: str,
+            *,
+            headers: object,
+            params: object,
+            timeout_seconds: float,
+        ) -> HttpResult:
+            assert isinstance(headers, dict)
+            assert headers.get("x-apikey") == key
+            return HttpResult(
+                status_code=200,
+                body={
+                    "data": {
+                        "attributes": {
+                            "last_analysis_stats": {"malicious": 1, "harmless": 0, "undetected": 2},
+                            "leaked": key,
+                        }
+                    }
+                },
+            )
+
+    registry = build_registry(
+        Settings(virustotal_api_key=SecretStr(key), demo_mode=False),
+        transport=Transport(),
+        resolver=_UnusedResolver(),
+    )
+    with caplog.at_level("DEBUG"):
+        result = registry.call("lookup_hash", {"file_hash": digest, "algorithm": "sha256"})
+    rendered = f"{result.model_dump_json()} {caplog.text}"
+    assert key not in rendered
+    assert result.output.raw["data"]["attributes"]["leaked"] == "[redacted]"
+
+
+class _UnusedResolver:
+    def resolve(self, domain: str, *, timeout_seconds: float) -> list[str]:
+        raise AssertionError("resolver should not run")

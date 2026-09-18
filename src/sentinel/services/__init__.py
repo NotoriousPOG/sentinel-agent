@@ -1,1 +1,1 @@
-"""Source, model, and threat-intel ports. Threat-intel clients are later milestones."""
+"""Source, model, and threat-intel ports. Provider clients live under ``providers``."""

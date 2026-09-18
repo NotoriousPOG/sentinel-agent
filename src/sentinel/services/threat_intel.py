@@ -1,7 +1,9 @@
 """Threat-intelligence ports.
 
-A vendor implements the protocols it can actually serve. No adapter is included.
-Keys are never arguments of these methods; a later client reads ``SecretStr``
+A vendor implements the protocols it can actually serve. Concrete clients live
+in ``sentinel.services.providers`` and are not imported here, so importing this
+module does not construct a client or select a mock.
+Keys are never arguments of these methods. A client reads ``SecretStr``
 settings itself and must not copy them into ``raw``.
 """
 
@@ -25,7 +27,7 @@ class IpIntelligence(Protocol):
     name: str
 
     def lookup_ip(self, query: LookupIpInput) -> LookupIpOutput:
-        """Look up an IP. No implementation ships in milestone 1."""
+        """Look up an IP. Missing credentials raise; they do not return a verdict."""
         ...
 
 
@@ -33,7 +35,7 @@ class FileIntelligence(Protocol):
     name: str
 
     def lookup_hash(self, query: LookupHashInput) -> LookupHashOutput:
-        """Look up a file hash. No implementation ships in milestone 1."""
+        """Look up a file hash. A transport failure is an error, not a zero count."""
         ...
 
 
@@ -41,7 +43,7 @@ class CveIntelligence(Protocol):
     name: str
 
     def lookup_cve(self, query: LookupCveInput) -> LookupCveOutput:
-        """Look up a CVE. No implementation ships in milestone 1."""
+        """Look up a CVE. Absent fields stay unknown; they are not filled in."""
         ...
 
 
@@ -49,7 +51,7 @@ class MitreCatalog(Protocol):
     name: str
 
     def search_mitre(self, query: SearchMitreInput) -> SearchMitreOutput:
-        """Search MITRE ATT&CK. No implementation ships in milestone 1."""
+        """Search the vendored ATT&CK subset. This does not download a bundle."""
         ...
 
 
@@ -57,5 +59,5 @@ class DomainIntelligence(Protocol):
     name: str
 
     def lookup_domain(self, query: LookupDomainInput) -> LookupDomainOutput:
-        """Look up a domain. No implementation ships in milestone 1."""
+        """Resolve a domain. This must not fetch the domain over HTTP."""
         ...

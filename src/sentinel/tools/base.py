@@ -13,5 +13,5 @@ class SecurityTool(Protocol):
     name: ToolName
 
     def run(self, tool_input: BaseModel) -> BaseModel:
-        """Execute the tool. No implementation ships in milestone 1."""
+        """Execute the tool against its provider. Invalid names never reach ``run``."""
         ...
