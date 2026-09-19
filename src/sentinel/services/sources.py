@@ -4,7 +4,10 @@
 keys are kept on ``raw_event`` or ``metadata`` and are not first-class fields.
 
 ``WazuhAdapter`` maps Wazuh's documented alert JSON. It does not call a manager.
-Vendor products below are importable interfaces and do not parse payloads.
+
+``GuardDutyAdapter`` maps one documented GuardDuty finding object. It does
+not call AWS. That mapper is not a full GuardDuty integration. The other
+vendor products below are importable interfaces and do not parse payloads.
 """
 
 import copy
@@ -15,6 +18,7 @@ from pydantic import ValidationError
 
 from sentinel.errors import AlertValidationError, NotImplementedCapability
 from sentinel.schemas.alerts import NormalizedAlert
+from sentinel.services.guardduty import normalize_guardduty
 from sentinel.services.validation import issues_from_validation
 from sentinel.services.wazuh import normalize_wazuh
 
@@ -93,11 +97,21 @@ class CrowdStrikeFalconAdapter(_UnimplementedVendorAdapter):
     product = "CrowdStrike Falcon"
 
 
-class GuardDutyAdapter(_UnimplementedVendorAdapter):
-    """UNIMPLEMENTED interface. Not an AWS GuardDuty integration."""
+class GuardDutyAdapter:
+    """Map one documented finding object. Not an AWS GuardDuty integration.
+
+    The payload is the GetFindings finding, not an EventBridge envelope and
+    not a detector listing. Missing required finding fields fail closed.
+    CrowdStrike, Defender, Elastic, and Splunk are still unimplemented.
+    """
 
     name = "aws_guardduty"
-    product = "AWS GuardDuty"
+    implemented = True
+
+    def normalize(self, payload: object) -> NormalizedAlert:
+        if not isinstance(payload, Mapping):
+            raise TypeError("GuardDuty finding must be a JSON object")
+        return normalize_guardduty(payload)
 
 
 class DefenderAdapter(_UnimplementedVendorAdapter):

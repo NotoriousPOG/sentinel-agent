@@ -17,7 +17,12 @@ from sentinel.models.alert import AlertRecord
 from sentinel.schemas.alerts import NormalizedAlert
 from sentinel.schemas.errors import ValidationCode
 from sentinel.schemas.ingest import AlertIngestRequest, AlertIngestResponse, StoredAlert
-from sentinel.services.sources import GenericJsonAdapter, SourceAdapter, WazuhAdapter
+from sentinel.services.sources import (
+    GenericJsonAdapter,
+    GuardDutyAdapter,
+    SourceAdapter,
+    WazuhAdapter,
+)
 from sentinel.storage.alerts import AlertRepository, aware_utc
 
 router = APIRouter(tags=["alerts"])
@@ -25,6 +30,7 @@ router = APIRouter(tags=["alerts"])
 _ADAPTERS: dict[str, SourceAdapter] = {
     GenericJsonAdapter.name: GenericJsonAdapter(),
     WazuhAdapter.name: WazuhAdapter(),
+    GuardDutyAdapter.name: GuardDutyAdapter(),
 }
 
 
