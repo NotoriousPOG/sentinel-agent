@@ -23,7 +23,8 @@ services:
       - "127.0.0.1:8091:8091"
     environment:
       SENTINEL_DATABASE_URL: postgresql+psycopg://sentinel:sentinel@postgres:5432/sentinel
-      SENTINEL_DEMO_MODE: "false"
+      # Default off. Override from the shell: SENTINEL_DEMO_MODE=true docker compose up --build
+      SENTINEL_DEMO_MODE: ${SENTINEL_DEMO_MODE:-false}
       SENTINEL_LOG_LEVEL: INFO
     depends_on:
       postgres:

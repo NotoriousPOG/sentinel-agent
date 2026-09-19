@@ -22,7 +22,7 @@ class HealthResponse(BaseModel):
 
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    """Process liveness. ``demo_mode`` is reported and does not enable investigations."""
+    """Process liveness. Reports ``demo_mode``. This route does not start an investigation."""
     settings = get_settings()
     return HealthResponse(
         status="ok",

@@ -17,8 +17,10 @@ class Settings(BaseSettings):
     """Runtime settings.
 
     ``demo_mode`` selects mock IP and hash providers when a tool registry is
-    built. It does not start an investigation, and it is not a fallback for a
-    failed live lookup. CVE, MITRE, and DNS ignore the flag.
+    built, and ``POST /investigations`` uses the in-process scripted demo
+    model instead of ``OpenAiCompatibleClient``. It is not a fallback for a
+    failed live lookup. CVE, MITRE, and DNS ignore the flag. With the flag
+    off, a missing LLM base URL, key, or model is still a configuration error.
     """
 
     model_config = SettingsConfigDict(

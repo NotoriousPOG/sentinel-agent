@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -14,6 +15,12 @@ from sentinel.services.clock import SystemClock
 from sentinel.services.llm import LlmMessage
 from sentinel.storage.session import make_engine
 from sentinel.tools.registry import build_registry
+
+_EXAMPLE_ALERT = json.loads(
+    (Path(__file__).resolve().parents[1] / "examples" / "synthetic-alert.json").read_text(
+        encoding="utf-8"
+    )
+)
 
 
 class ExplodingTransport:
@@ -57,13 +64,13 @@ def _patch_ports(monkeypatch: pytest.MonkeyPatch, model: ScriptedModel) -> None:
         resolver=ExplodingResolver(),
     )
 
-    def _llm(_settings: Settings) -> ScriptedModel:
+    def _llm(_settings: Settings, _alert: object) -> ScriptedModel:
         return model
 
     def _tools(_settings: Settings) -> object:
         return registry
 
-    monkeypatch.setattr("sentinel.api.routes.investigations.build_llm_client", _llm)
+    monkeypatch.setattr("sentinel.api.routes.investigations.build_investigation_model", _llm)
     monkeypatch.setattr("sentinel.api.routes.investigations.build_registry", _tools)
 
 
@@ -214,6 +221,7 @@ def test_missing_llm_config_stores_nothing(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _store_alert(client, "alert-nollm")
+    monkeypatch.setenv("SENTINEL_DEMO_MODE", "false")
     monkeypatch.delenv("SENTINEL_LLM_BASE_URL", raising=False)
     monkeypatch.delenv("SENTINEL_LLM_API_KEY", raising=False)
     monkeypatch.delenv("SENTINEL_LLM_MODEL", raising=False)
@@ -223,3 +231,51 @@ def test_missing_llm_config_stores_nothing(
     assert response.json() == {"error": "not_configured", "provider": "llm"}
     assert "sk-" not in response.text
     assert _count() == 0
+
+
+def test_demo_mode_completes_without_llm_settings(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The scripted demo model finishes a run. It is not the HTTP client."""
+    monkeypatch.setenv("SENTINEL_DEMO_MODE", "true")
+    for name in (
+        "SENTINEL_LLM_BASE_URL",
+        "SENTINEL_LLM_API_KEY",
+        "SENTINEL_LLM_MODEL",
+        "SENTINEL_ABUSEIPDB_API_KEY",
+        "SENTINEL_VIRUSTOTAL_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    get_settings.cache_clear()
+
+    def _forbid_hosted(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("OpenAiCompatibleClient must not be built in demo_mode")
+
+    monkeypatch.setattr("sentinel.agents.demo_model.build_llm_client", _forbid_hosted)
+
+    created = client.post("/alerts", json=_EXAMPLE_ALERT)
+    assert created.status_code == 201
+    alert_id = created.json()["alert"]["alert_id"]
+    response = client.post("/investigations", json={"alert_id": alert_id})
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "AWAITING_REVIEW"
+    assert body["status"] != "COMPLETE"
+    assert body["error"] is None
+    tools = [item["tool"] for item in body["tool_history"]]
+    assert tools == ["lookup_ip", "lookup_hash", "search_mitre"]
+    sources = {item["source"] for item in body["evidence"]}
+    assert "mock:abuseipdb" in sources
+    assert "mock:virustotal" in sources
+    assert "abuseipdb" not in sources
+    assert "virustotal" not in sources
+    ip_row = next(item for item in body["evidence"] if item["tool"] == "lookup_ip")
+    hash_row = next(item for item in body["evidence"] if item["tool"] == "lookup_hash")
+    assert ip_row["result"]["reported_malicious"] is None
+    assert hash_row["result"]["malicious_count"] is None
+    report = client.get(f"/investigations/{body['investigation_id']}/report")
+    assert report.status_code == 200
+    document = report.json()
+    assert document["classification"] == "INCONCLUSIVE"
+    assert document["confidence"]["method"] == "weighted_evidence_v1"
+    assert _count() == 1

@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from sentinel.agents.demo_model import build_investigation_model
 from sentinel.agents.executor import run_investigation
 from sentinel.agents.reporting import published_report
 from sentinel.agents.review import apply_analyst_review, review_status
@@ -31,7 +32,6 @@ from sentinel.schemas.investigation import (
 from sentinel.schemas.reports import IncidentReport
 from sentinel.schemas.review import AnalystReview, ReviewResult
 from sentinel.services.clock import SystemClock
-from sentinel.services.llm_http import build_llm_client
 from sentinel.storage.alerts import AlertRepository
 from sentinel.storage.investigations import InvestigationRepository
 from sentinel.tools.registry import build_registry
@@ -68,7 +68,7 @@ def create_investigation(
             settings=settings,
         ),
         alert=alert,
-        llm=build_llm_client(settings),
+        llm=build_investigation_model(settings, alert),
         tools=build_registry(settings),
         clock=clock,
         max_repair_attempts=settings.max_repair_attempts,

@@ -168,7 +168,7 @@ Two ports. Threat-intel clients are behind the second. The LLM port is `LlmProvi
   - A checked-in subset of Enterprise ATT&CK 19.2. See `src/sentinel/data/attack/README.md`. Search does not download the bundle.
   - DNS via an injected resolver. The default uses `socket.getaddrinfo` with a timeout. It does not HTTP-fetch the domain.
 
-  `SENTINEL_DEMO_MODE` selects `mock:abuseipdb` and `mock:virustotal` before the call. It does not replace CVE, MITRE, or DNS, and it does not catch a live failure and return a mock. Mock `raw` payloads are marked synthetic. Keys, when configured, are `SecretStr`. No vendor SDK is installed.
+  `SENTINEL_DEMO_MODE` selects `mock:abuseipdb` and `mock:virustotal` before the call. It does not replace CVE, MITRE, or DNS, and it does not catch a live failure and return a mock. When the flag is on, `POST /investigations` uses `ScriptedDemoModel` in `agents/demo_model.py` instead of `OpenAiCompatibleClient`. That class reuses `plan_tools` from `evals/model.py`. It does not read dataset labels and it does not call a hosted model. With the flag off, a missing LLM base URL, key, or model is still `ConfigurationError` and nothing is stored. Mock `raw` payloads are marked synthetic. Keys, when configured, are `SecretStr`. No vendor SDK is installed.
 
 Source adapters are a third port. `GenericJsonAdapter` maps a JSON object onto `NormalizedAlert`. Keys that are not fields of that model are copied onto `raw_event` when the caller did not supply one, and listed under `metadata.unmapped_fields`. They are not promoted to first-class fields. `NormalizedAlert` itself still rejects unknown keys (`extra=forbid`); the split happens in the adapter, not by loosening the model.
 
@@ -217,7 +217,7 @@ Pydantic models live in `schemas/`. SQLAlchemy models live in `models/`. Sharing
 
 `pydantic-settings` loads `SENTINEL_*` environment variables. Secrets use `SecretStr`. A client reads a secret only to build a request header and must not copy it into a result, a log line, or an exception. `.env.example` contains placeholders. Docker Compose uses a local database password for a local database; it is not a production secret and it is not reused as a default inside Python. The application default database URL is a local SQLite file so `pytest` and a casual import do not attempt to authenticate to PostgreSQL.
 
-`SENTINEL_DEMO_MODE` selects mock IP and hash providers when `build_registry` runs. Loading settings, `GET /health`, and `POST /alerts` do not call a provider. The flag does not start an investigation.
+`SENTINEL_DEMO_MODE` selects mock IP and hash providers when `build_registry` runs, and selects the scripted demo model for `POST /investigations`. Loading settings, `GET /health`, and `POST /alerts` do not call a provider or a model. The flag does not replace a failed live lookup. CVE, MITRE, and DNS ignore it. With the flag off, missing LLM settings are a configuration error and the investigation is not stored.
 
 ## Intentionally deferred
 
