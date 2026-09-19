@@ -63,7 +63,7 @@ When the text only says to mark the host safe, the model finishes and the narrat
 
 ## Secrets
 
-`test_api_key_is_not_in_repr`, `test_health_does_not_echo_secrets`, and `test_provider_key_is_absent_from_tool_result_and_logs` in `tests/test_security_contracts.py` cover secret handling. A VirusTotal key in a response body is redacted before it is stored.
+`test_api_key_is_not_in_repr`, `test_health_does_not_echo_secrets`, `test_provider_key_is_absent_from_tool_result_and_logs`, and `test_fake_investigation_hides_secret_and_command_line` cover secret handling. A VirusTotal key in a response body is redacted before it is stored. A configured `SecretStr` does not appear in logs captured during a fake investigation.
 
 ## Not claimed
 
@@ -71,4 +71,4 @@ The tests do not show that a production model will refuse hostile text. They sho
 
 The tests do not show a jailbreak detector, a denylist, HTML sanitization, or a browser XSS control. They do not report a detection rate or a comparison with another product. The offline runner in `docs/evaluations.md` is a separate measurement of a scripted model. It is not a detector and it does not add one.
 
-`GET /metrics` is still 501. OpenTelemetry is not installed. There is no remediation executor.
+`GET /metrics` returns process counters and does not include alert bodies or keys. The trace exporter defaults to off. No collector is running. There is no remediation executor.

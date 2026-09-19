@@ -29,7 +29,7 @@ alembic/
   versions/0002_alerts.py
   versions/0003_investigations.py
 src/sentinel/
-  api/                 FastAPI app, health, alert and investigation routes, reserved 501 routes
+  api/                 FastAPI app, health, alerts, investigations, metrics
   agents/              executor, prompt separation, status transitions, budget predicates
   evidence/            correlation and citation verification; no model call
   models/              SQLAlchemy models for alerts and investigations
@@ -37,7 +37,7 @@ src/sentinel/
   tools/               closed registry and the five tools
   services/            source adapters, LLM port, threat-intel clients
   storage/             engine and session factory
-  observability/       package marker; instrumentation is milestone 9
+  observability/       correlation ids, process metrics, default-off tracing
   security/            untrusted-field registry (not a detector)
   evals/               offline runner, scripted model, not a hosted client
   config/              pydantic-settings
@@ -281,15 +281,36 @@ Not done, and not claimed:
 
 ### 9. Observability
 
+Status: done for the criteria below. Milestone 10 is not started.
+
 Tracing, metrics, cost tracking, structured logs, correlation ids.
 
 Acceptance:
 
-- Each investigation emits one correlation id, present on logs and on the trace.
-- `GET /metrics` exposes investigation counts, tool errors, and token totals. It does not expose alert bodies or keys.
-- A unit test asserts a configured `SecretStr` never appears in a captured log line during a fake investigation.
-- OpenTelemetry is added only with an exporter that defaults to off. Tests do not require a collector.
-- `docs` describe how to turn it on locally.
+- [x] Each investigation emits one correlation id, present on logs and on the trace.
+- [x] `GET /metrics` exposes investigation counts, tool errors, and token totals. It does not expose alert bodies or keys.
+- [x] A unit test asserts a configured `SecretStr` never appears in a captured log line during a fake investigation.
+- [x] OpenTelemetry is added only with an exporter that defaults to off. Tests do not require a collector.
+- [x] `docs` describe how to turn it on locally.
+
+Also done:
+
+- The correlation id is the investigation id. JSON log lines for that run carry `correlation_id`. The span named `investigation` sets the same attribute. One span per run.
+- `GET /metrics` is JSON, not Prometheus text. `prometheus-client` was not added. Counts are in-process and reset on restart. They are not read from PostgreSQL. The body has no command lines, usernames, or API keys.
+- `tests/test_observability.py` captures logs during a fake investigation. A configured `SecretStr` is absent. The alert command line is absent from info lines. The same test checks the span attribute.
+- `opentelemetry-api` 1.44.0 and `opentelemetry-sdk` 1.44.0 were the current PyPI releases on 2026-09-18 (`pip index versions`). Those are the pins. The exporter is `SENTINEL_OTEL_EXPORTER`, default `off`. `console` prints spans to this process's stdout. Tests use the SDK in-memory exporter.
+- `opentelemetry-exporter-otlp-proto-http` 1.44.0 was visible on PyPI the same day and was not added. There is no collector and no OTLP client. `docs/observability.md` says that.
+- `estimated_cost_usd` is `0` unless `SENTINEL_USD_PER_MILLION_TOKENS` is set. The variable is unset by default. No model price is shipped.
+- Provider `raw` is not logged at info. The debug helper stays silent unless `SENTINEL_LOG_PROVIDER_RAW` is true, and provider clients do not call it.
+- `verify_report`, the confidence formula, and the `demo_mode` mocks were not changed.
+
+Not done, and not claimed:
+
+- No portfolio walkthrough, screenshots, or demo-alert polish. That is milestone 10. The README status table was updated. Eval counts were not pasted into it.
+- No jailbreak detector and no denylist.
+- No remediation executor, including a stub.
+- Provider backoff, Redis, pgvector, and the OpenAI SDK are still absent.
+- CI does not fail on a classification agreement threshold. The 3/10 disagreement is unchanged: mocks leave verdict fields null, so the pipeline stays `INCONCLUSIVE`.
 
 ### 10. Portfolio polish
 
@@ -320,6 +341,8 @@ Verified on 2026-09-18 with `pip index versions <name>` against PyPI. Versions b
 | `alembic` | 1.20.0 | Migrations. |
 | `psycopg[binary]` | `psycopg` 3.3.6, extra pulls `psycopg-binary` 3.3.6 | PostgreSQL driver for SQLAlchemy's `postgresql+psycopg` URL. The binary extra avoids compiling `libpq` in the image. |
 | `httpx2` | 2.13.0 | HTTP client for AbuseIPDB, VirusTotal, and OSV. Re-verified on PyPI on 2026-09-18. `httpx` 0.28.1 was current the same day and was not added; `httpx2` is the same-API fork Starlette 1.6's `TestClient` already imports. |
+| `opentelemetry-api` | 1.44.0 | Trace API. Verified with `pip index versions` on 2026-09-18. |
+| `opentelemetry-sdk` | 1.44.0 | `TracerProvider` and `ConsoleSpanExporter`. Same day, same check. The exporter is off unless `SENTINEL_OTEL_EXPORTER=console`. |
 
 `setuptools` 84.0.0 is the build backend only (`requires` in `[build-system]`), not an application dependency.
 
@@ -342,9 +365,9 @@ Verified on 2026-09-18 with `pip index versions <name>` against PyPI. Versions b
 | `openai` or any other LLM SDK | The port is a `Protocol`. An SDK is justified only when a class implements that port and needs the SDK's types. |
 | `redis` | No queue and no shared cache. See architecture. |
 | `pgvector` | No similarity search. Citations are relational. |
-| OpenTelemetry (`opentelemetry-api`, `opentelemetry-sdk`) | Milestone 9, and only with a default-off exporter. A no-op dependency is still a dependency. |
-| `prometheus-client` | Same milestone as `GET /metrics`. The route is 501 until then. |
-| `structlog` | stdlib logging is enough until milestone 9. |
+| OpenTelemetry OTLP exporter (`opentelemetry-exporter-otlp-proto-http` 1.44.0) | Seen on PyPI on 2026-09-18. Not added. Console export is in the SDK and defaults to off. No collector is running. |
+| `prometheus-client` | Not added. `GET /metrics` is a JSON document. A client library was not required. |
+| `structlog` | Not added. Investigation logs are stdlib JSON lines. |
 | `httpx` | Not added. `httpx2` 2.13.0 is the HTTP client. |
 | Vendor SDKs (VirusTotal, and similar) | HTTP behind the threat-intel protocols. No SDK. |
 | `email-validator` | Not used. `EmailStr` is not a field. |

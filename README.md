@@ -17,7 +17,8 @@ This repository stores normalized alerts, looks up indicators through a closed s
 | `GET /investigations/{id}/evidence` | Returns each stored row, the indicator links, and any contradiction links. Does not merge two providers into one result |
 | `GET /investigations/{id}/report` | Returns the stored report after verification accepts it. `404 report_not_found` when no verified report is stored. Does not return a draft |
 | `POST /investigations/{id}/review` | Stores an `AnalystReview`. Approving the conclusion is the only path to `COMPLETE`. Rejection stores the decision and moves to `FAILED`. Approving remediation does not run an action |
-| `GET /metrics` | Reserved. Returns 501. No metrics payload |
+| `GET /metrics` | JSON counters for this process: investigations by status, tool errors, token total, estimated cost. No alert bodies, command lines, usernames, or keys. Resets on process restart |
+| Tracing | OpenTelemetry spans, one per investigation. Exporter defaults to off. `SENTINEL_OTEL_EXPORTER=console` prints spans to stdout. No collector is running. See `docs/observability.md` |
 | LLM client | OpenAI-compatible HTTP client behind `LlmProvider`, using `httpx2`. No OpenAI SDK. Missing base URL, key, or model is a configuration error. The key is not logged. Tests use a fake transport or an in-process model |
 | Agent loop | Calls `transition()` and the budget predicates. Tool calls go through `ToolRegistry`. The tool phase ends at `VERIFYING`. A verified report then moves to `AWAITING_REVIEW`. `COMPLETE` happens only when an analyst approves the conclusion |
 | Prompt separation | System prompt is a constant. The report prompt is a separate constant. Alert text, tool results, evidence, and rejected model output go in a separate message inside untrusted-data markers. A hostile corpus is tested with a fake model that follows the payload. Not a jailbreak detector |
@@ -39,7 +40,6 @@ This repository stores normalized alerts, looks up indicators through a closed s
 | `demo_mode` | Selects mock IP and hash providers tagged `mock:`. Does not start an investigation by itself, and does not replace a failed live call |
 | Prompt injection | Not a detector. Hostile alert text stays inside the data markers. `exec`, `run_shell`, and `fetch_url` fail closed and do not call a provider. Classification, confidence, and review do not follow alert text |
 | Evals | Offline runner: `python -m sentinel.evals run --output-dir <dir>`. Synthetic dataset. The command prints the counts. This file does not copy them |
-| Tracing, remediation | Not implemented. `GET /metrics` is still 501. No OpenTelemetry. No remediation executor |
 
 Evaluation counts come from `python -m sentinel.evals run`. They are not copied into this file.
 
@@ -60,7 +60,7 @@ Health: `GET /health`. Interactive API docs: `GET /docs`.
 
 `POST /alerts` takes `{"source": "generic_json" | "wazuh", "payload": { ... }}`. `source` defaults to `generic_json`. A validation failure is HTTP 422 with `missing_field`, `invalid_field`, `invalid_type`, or `unknown_source`. The response does not echo the submitted value. `GET /alerts/{id}` returns 404 with `alert_not_found` when the id was never stored.
 
-`POST /investigations` takes `{"alert_id": "..."}` for an alert that was already stored. It runs the executor in the request and returns the investigation state. A missing alert is 404 `alert_not_found`. A missing LLM base URL, key, or model is 503 `not_configured` and nothing is stored. `GET /investigations/{id}` reloads the state. `GET /investigations/{id}/evidence` returns each stored evidence row, indicator links, and contradiction links. It does not merge providers. `GET /investigations/{id}/report` returns the verified report, or 404 `report_not_found` when none has been stored. `POST /investigations/{id}/review` stores the analyst decision. Notes are required. `GET /metrics` returns 501.
+`POST /investigations` takes `{"alert_id": "..."}` for an alert that was already stored. It runs the executor in the request and returns the investigation state. A missing alert is 404 `alert_not_found`. A missing LLM base URL, key, or model is 503 `not_configured` and nothing is stored. `GET /investigations/{id}` reloads the state. `GET /investigations/{id}/evidence` returns each stored evidence row, indicator links, and contradiction links. It does not merge providers. `GET /investigations/{id}/report` returns the verified report, or 404 `report_not_found` when none has been stored. `POST /investigations/{id}/review` stores the analyst decision. Notes are required. `GET /metrics` returns process counters (investigation totals, tool errors, token totals, estimated cost). It does not include alert text or keys. Estimated cost is `0` unless `SENTINEL_USD_PER_MILLION_TOKENS` is set. That variable is not a model price. See `docs/observability.md`.
 
 Run `alembic upgrade head` before posting alerts outside the test suite. The API process in Docker Compose does that on startup.
 
