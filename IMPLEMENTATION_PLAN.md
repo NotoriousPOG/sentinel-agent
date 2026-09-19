@@ -2,6 +2,10 @@
 
 Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestone 4 is implemented for the criteria checked below. Milestone 5 is implemented for the criteria checked below. Milestone 6 is implemented for the criteria checked below. Milestone 7 is implemented for the criteria checked below. Milestone 8 is implemented for the criteria checked below. Milestones 9–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
 
+## Extra: local Floci demo
+
+`examples/floci/` is a local walkthrough. It is not a milestone and it does not rewrite milestones 1–10. A runner stores a synthetic GuardDuty finding in Floci (S3 only) and posts it to the existing API. Analyst approval is `POST /investigations/{id}/review` plus an S3 object. `isolate_instance` raises if called. The GuardDuty mapper reads one documented finding object and is not a GuardDuty integration. CrowdStrike, Defender, Elastic, and Splunk still raise. There is still no remediation executor. Bedrock AgentCore is not used.
+
 The product pipeline is:
 
 ```text
@@ -99,7 +103,8 @@ Not done, and not claimed:
 - Dynamic decoder fields and Windows/Sysmon shapes are not mapped to first-class fields. They remain on `raw_event`.
 - The 2017 dynamic-fields JSON example has no top-level `id`. Normalization fails closed instead of inventing an `alert_id`.
 - No Wazuh manager client.
-- CrowdStrike, GuardDuty, Defender, Elastic, and Splunk still raise and have no fixtures.
+- CrowdStrike, Defender, Elastic, and Splunk still raise and have no fixtures.
+- GuardDuty has a minimal mapper for the documented finding object used by `examples/floci/`. That mapper is outside the milestone 2 contract. See "Extra: local Floci demo" above. It is not a GuardDuty integration.
 - Tools, the agent loop, report generation, review storage, prompt-injection runtime defenses, evals, tracing, and remediation execution are later milestones.
 
 ### 3. Tool system

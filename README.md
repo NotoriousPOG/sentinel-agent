@@ -34,7 +34,9 @@ CVE lookup, DNS, and MITRE ignore the flag. A failed live call is not replaced w
 
 The mock rows leave `reported_malicious` and the hash counts null. The pipeline does not turn that into a malicious verdict. The example below is `INCONCLUSIVE`.
 
-Screenshots below are from the 2026-09-19 uvicorn run of that example, not from an image editor. Interactive docs: `GET /docs`.
+A separate local AWS walkthrough is in [examples/floci/README.md](examples/floci/README.md). It stores a synthetic GuardDuty finding in Floci and posts that finding to this API. Sentinel still uses `SENTINEL_DEMO_MODE=true` and `ScriptedDemoModel`. Floci does not execute the model. Bedrock AgentCore is not used. The GuardDuty mapper in that demo is not a full integration.
+
+Screenshots below are from the 2026-09-19 uvicorn run of the generic JSON example, not from an image editor. Interactive docs: `GET /docs`.
 
 ![OpenAPI documentation](docs/images/demo-openapi.png)
 
@@ -44,7 +46,7 @@ Screenshots below are from the 2026-09-19 uvicorn run of that example, not from 
 
 What the code does today:
 
-- `POST /alerts` and `GET /alerts/{id}` store a normalized alert. `generic_json` and the documented Wazuh alert shape are implemented. Replaying the same `alert_id` returns the first copy. CrowdStrike, GuardDuty, Defender, Elastic, and Splunk adapters raise.
+- `POST /alerts` and `GET /alerts/{id}` store a normalized alert. `generic_json`, the documented Wazuh alert shape, and one documented GuardDuty finding object are implemented. The GuardDuty mapper is not a full integration. Replaying the same `alert_id` returns the first copy. CrowdStrike, Defender, Elastic, and Splunk adapters raise.
 - `POST /investigations` runs the executor in the request. A verified report ends at `AWAITING_REVIEW`. Otherwise the run is `FAILED`. The route does not approve a conclusion.
 - `GET /investigations/{id}`, `/evidence`, and `/report` reload stored state. Evidence keeps one row per provider. The report route returns 404 `report_not_found` when verification has not accepted a report.
 - `POST /investigations/{id}/review` stores an `AnalystReview`. Notes are required. Approving the conclusion is the only path to `COMPLETE`. Approving remediation does not run an action.
@@ -74,7 +76,7 @@ SENTINEL_DEMO_MODE=true uvicorn sentinel.api.app:app --host 127.0.0.1 --port 809
 
 Health: `GET /health`. Docs: `GET /docs`.
 
-`POST /alerts` takes `{"source": "generic_json" | "wazuh", "payload": { ... }}`. `source` defaults to `generic_json`. A validation failure is HTTP 422 and does not echo the submitted value.
+`POST /alerts` takes `{"source": "generic_json" | "wazuh" | "aws_guardduty", "payload": { ... }}`. `source` defaults to `generic_json`. `aws_guardduty` expects one GuardDuty finding object, not an EventBridge envelope. A validation failure is HTTP 422 and does not echo the submitted value.
 
 `POST /investigations` takes `{"alert_id": "..."}` for an alert that was already stored. A missing alert is 404 `alert_not_found`. With `demo_mode` off, a missing LLM base URL, key, or model is 503 `not_configured` and nothing is stored.
 
@@ -156,7 +158,7 @@ It prints the counts and writes `report.json` and `report.md` in that directory.
 
 Secrets are `SecretStr`. A provider key is a request header. It is not copied into results, logs, or exception text. Database access goes through SQLAlchemy. Alert strings are not concatenated into SQL. `extra=forbid` drops unexpected JSON fields.
 
-There is no remediation executor, including a stub. `RecommendedAction.requires_human_approval` is the literal `True`. Review fields named `execute` or `auto_remediate` fail validation.
+There is no remediation executor. The Floci demo defines `isolate_instance` in `examples/floci/runner.py`, and that function raises if called. `RecommendedAction.requires_human_approval` is the literal `True`. Review fields named `execute` or `auto_remediate` fail validation.
 
 `GET /metrics` and info logs omit alert bodies, command lines, usernames, and keys. Provider `raw` is not logged at info.
 
@@ -170,7 +172,7 @@ Add a `ToolName`, typed input and output models, a class whose `name` matches, a
 
 Not in this repository, and not started:
 
-- Source adapters for CrowdStrike, GuardDuty, Defender, Elastic, and Splunk. The classes exist and raise.
+- Source adapters for CrowdStrike, Defender, Elastic, and Splunk. The classes exist and raise. GuardDuty has a minimal mapper for one documented finding shape, described in [examples/floci/README.md](examples/floci/README.md). That is not a GuardDuty integration.
 - A separate process that could apply a remediation action only after a stored review approves that action id. This tree does not contain that process.
 - Provider backoff, a readiness check that touches PostgreSQL, and the rest of the Enterprise ATT&CK catalog.
 - Redis, pgvector, a Prometheus client, LangGraph, and an OpenAI SDK. The reasons they were left out are in [docs/architecture.md](docs/architecture.md).
@@ -184,6 +186,7 @@ A jailbreak detector is not on this list. The intended control remains separatio
 - `demo_mode` does not mock CVE, DNS, or MITRE. An alert with a domain will call the resolver. An alert with a CVE will call OSV unless a test injects a transport.
 - The ATT&CK file is a 19-technique subset. A search miss means the technique is not in the subset.
 - Wazuh support is a normalizer for the documented JSON cited in `tests/wazuh_fixtures.py`. There is no manager client.
+- GuardDuty support is the same kind of limit: one documented finding object, no detector client, no EventBridge envelope. See [examples/floci/README.md](examples/floci/README.md).
 - The API is synchronous. One investigation runs inside the request. There is no queue.
 - `GET /metrics` is this process only. A restart clears it. Estimated cost is `0` unless you set `SENTINEL_USD_PER_MILLION_TOKENS`. That variable is not a model price.
 - SQLite is for unit tests and a casual local file. It is not a supported deployment.
