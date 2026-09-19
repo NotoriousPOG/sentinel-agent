@@ -28,6 +28,8 @@ curl -sS -H 'Content-Type: application/json' \
 
 `GET /investigations/{id}/report` returns the verified report. `POST /investigations/{id}/review` is how an analyst approves the conclusion. These commands do not approve it.
 
+The local Floci walkthrough is [floci/README.md](floci/README.md). It is a separate demo. It does not replace the commands above, and Floci does not execute the model.
+
 ## Captured run
 
 `investigation-response.json` is the body of `POST /investigations` from a run on 2026-09-19T00:38:17Z against `http://127.0.0.1:8091`. `SENTINEL_DEMO_MODE` was true. No LLM, AbuseIPDB, or VirusTotal key was set. The file is that JSON body, indented. Values were not edited.

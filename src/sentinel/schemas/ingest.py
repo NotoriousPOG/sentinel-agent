@@ -16,7 +16,7 @@ from sentinel.schemas.timestamps import require_aware
 class AlertIngestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source: Literal["generic_json", "wazuh"] = "generic_json"
+    source: Literal["generic_json", "wazuh", "aws_guardduty"] = "generic_json"
     payload: dict[str, Any]
 
 

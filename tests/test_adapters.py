@@ -21,7 +21,7 @@ def _wazuh_payload() -> dict[str, object]:
 
 def test_generic_json_and_wazuh_are_implemented() -> None:
     implemented = [adapter.name for adapter in iter_source_adapters() if adapter.implemented]
-    assert implemented == ["generic_json", "wazuh"]
+    assert implemented == ["generic_json", "wazuh", "aws_guardduty"]
 
 
 def test_wazuh_envelope_accepts_minimal_shape_and_keeps_unknown_keys() -> None:
@@ -35,7 +35,7 @@ def test_wazuh_envelope_accepts_minimal_shape_and_keeps_unknown_keys() -> None:
 
 def test_vendor_interfaces_are_unimplemented() -> None:
     for adapter in iter_source_adapters():
-        if adapter.name in {"generic_json", "wazuh"}:
+        if adapter.name in {"generic_json", "wazuh", "aws_guardduty"}:
             continue
         with pytest.raises(NotImplementedCapability, match="not scheduled"):
             adapter.normalize({"anything": True})
