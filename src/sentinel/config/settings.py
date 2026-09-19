@@ -46,6 +46,35 @@ class Settings(BaseSettings):
     investigation_timeout_seconds: int = Field(default=120, ge=1, le=900)
     token_budget: int = Field(default=24_000, ge=1, le=200_000)
 
+    # ``off`` attaches no exporter. ``console`` prints spans to this process.
+    # There is no collector in this repository.
+    otel_exporter: Literal["off", "console"] = "off"
+    # Unset means estimated cost is 0. This is not a price for any model.
+    usd_per_million_tokens: float | None = Field(default=None, ge=0)
+    # Provider ``raw`` is not logged unless this is true, and then only at debug.
+    log_provider_raw: bool = False
+
+    @field_validator("otel_exporter", mode="before")
+    @classmethod
+    def _otel_exporter(cls, value: object) -> object:
+        if value == "" or value is None:
+            return "off"
+        return value
+
+    @field_validator("usd_per_million_tokens", mode="before")
+    @classmethod
+    def _price(cls, value: object) -> object:
+        if value == "" or value is None:
+            return None
+        return value
+
+    @field_validator("log_provider_raw", mode="before")
+    @classmethod
+    def _raw_flag(cls, value: object) -> object:
+        if value == "" or value is None:
+            return False
+        return value
+
     @field_validator("database_url")
     @classmethod
     def _database_url(cls, value: str) -> str:

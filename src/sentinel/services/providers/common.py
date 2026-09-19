@@ -8,10 +8,9 @@ from pydantic import SecretStr
 
 from sentinel.config.settings import configured_secret
 from sentinel.errors import ConfigurationError, ProviderError
+from sentinel.observability.logging import log_event
 from sentinel.services.http import HttpTransport, status_reason
 from sentinel.services.redact import redact_json
-
-logger = logging.getLogger("sentinel.providers")
 
 
 def require_api_key(provider: str, api_key: SecretStr | None) -> str:
@@ -57,8 +56,15 @@ def request_json(
 
 
 def log_ok(provider: str) -> None:
-    logger.info("provider lookup provider=%s status=ok", provider)
+    log_event("sentinel.providers", logging.INFO, "provider_lookup", provider=provider, status="ok")
 
 
 def log_failure(provider: str, reason: str) -> None:
-    logger.warning("provider lookup failed provider=%s reason=%s", provider, reason)
+    log_event(
+        "sentinel.providers",
+        logging.WARNING,
+        "provider_lookup",
+        provider=provider,
+        status="error",
+        reason=reason,
+    )

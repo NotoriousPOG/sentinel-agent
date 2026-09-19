@@ -1,1 +1,1 @@
-"""HTTP API. Health is implemented. Investigation routes are reserved."""
+"""HTTP API. Health, alerts, investigations, and process metrics."""

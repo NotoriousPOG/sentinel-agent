@@ -33,6 +33,11 @@ from sentinel.errors import (
     ProviderError,
     UnknownTool,
 )
+from sentinel.observability.instrument import (
+    investigation_scope,
+    note_tool_error,
+    note_tool_finished,
+)
 from sentinel.schemas.alerts import NormalizedAlert
 from sentinel.schemas.investigation import (
     InvestigationState,
@@ -75,7 +80,35 @@ def run_investigation(
 
     After ``VERIFYING``, the report step may move to ``AWAITING_REVIEW``.
     ``COMPLETE`` is not entered here.
+
+    Logs and the trace span for this call use ``state.investigation_id`` as
+    the correlation id. The alert body is not written to the log.
     """
+    if state.status is not InvestigationStatus.RECEIVED:
+        raise ValueError("executor starts from RECEIVED")
+    with investigation_scope(state.investigation_id) as observation:
+        finished = _run_investigation(
+            state,
+            alert=alert,
+            llm=llm,
+            tools=tools,
+            clock=clock,
+            max_repair_attempts=max_repair_attempts,
+        )
+        observation.finish(finished)
+        return finished
+
+
+def _run_investigation(
+    state: InvestigationState,
+    *,
+    alert: NormalizedAlert,
+    llm: LlmProvider,
+    tools: ToolRegistry,
+    clock: Clock,
+    max_repair_attempts: int,
+) -> InvestigationState:
+    """Tool loop. ``run_investigation`` is the wrapper that records the run."""
     if state.status is not InvestigationStatus.RECEIVED:
         raise ValueError("executor starts from RECEIVED")
     now = clock.now()
@@ -159,6 +192,7 @@ def run_investigation(
         try:
             execution = tools.call(tool_name, turn.arguments)
         except UnknownTool:
+            note_tool_error("unknown_tool")
             state, repairs_used, failed = _repair(
                 state,
                 messages,
@@ -173,6 +207,7 @@ def run_investigation(
                 return state
             continue
         except ValidationError:
+            note_tool_error("invalid_arguments")
             state, repairs_used, failed = _repair(
                 state,
                 messages,
@@ -187,10 +222,13 @@ def run_investigation(
                 return state
             continue
         except ProviderError as exc:
+            note_tool_error("provider_error")
             return _fail(state, f"{exc.provider} lookup failed: {exc.reason}", clock.now())
         except ConfigurationError as exc:
+            note_tool_error("not_configured")
             return _fail(state, f"{exc.provider} is not configured", clock.now())
 
+        note_tool_finished(execution.tool.value)
         now = clock.now()
         if execution.key in state.seen_tool_calls:
             if state.evidence:

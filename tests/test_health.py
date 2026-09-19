@@ -65,11 +65,16 @@ def test_valid_alert_is_stored_and_reloaded(client: TestClient) -> None:
     assert loaded.json()["alert"]["source"] == "unit-test"
 
 
-def test_reserved_routes_return_501(client: TestClient) -> None:
+def test_metrics_are_counts(client: TestClient) -> None:
     response = client.get("/metrics")
-    assert response.status_code == 501
-    assert response.json()["error"] == "not_implemented"
-    assert response.json()["milestone"] == 9
+    assert response.status_code == 200
+    body = response.json()
+    assert body["investigations_total"] == 0
+    assert body["tool_errors"] == 0
+    assert body["tokens_total"] == 0
+    assert body["estimated_cost_usd"] == "0"
+    assert "command_line" not in response.text
+    assert "not_implemented" not in response.text
 
 
 def test_missing_report_is_not_a_draft(client: TestClient) -> None:

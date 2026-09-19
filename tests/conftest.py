@@ -19,6 +19,16 @@ def _reset_settings() -> Iterator[None]:
     get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def _reset_process_metrics() -> Iterator[None]:
+    """Investigation counters are process-global. Each test starts from zero."""
+    from sentinel.observability.metrics import reset_metrics
+
+    reset_metrics()
+    yield
+    reset_metrics()
+
+
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """HTTP client bound to a migrated SQLite file. This is not the PostgreSQL test."""

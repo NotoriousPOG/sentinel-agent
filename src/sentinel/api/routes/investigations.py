@@ -1,4 +1,4 @@
-"""Start, reload, and review an investigation. Metrics stay unimplemented."""
+"""Start, reload, and review an investigation."""
 
 import uuid
 from typing import Annotated
@@ -20,6 +20,7 @@ from sentinel.errors import (
 )
 from sentinel.evidence.correlate import correlate
 from sentinel.models.alert import AlertRecord
+from sentinel.observability.metrics import update_investigation_status
 from sentinel.schemas.alerts import NormalizedAlert
 from sentinel.schemas.errors import ValidationCode
 from sentinel.schemas.investigation import (
@@ -141,6 +142,7 @@ def review_investigation(
         )
     updated = apply_analyst_review(state, review, now=SystemClock().now())
     InvestigationRepository(session).save(updated)
+    update_investigation_status(updated.investigation_id, updated.status.value)
     stored = updated.review
     if stored is None:
         raise InvestigationNotFound()
