@@ -1,0 +1,343 @@
+{
+  "investigation_id": "202870b281004ba6be7325984971c8f5",
+  "alert_id": "demo-synthetic-203-0-113-44",
+  "status": "AWAITING_REVIEW",
+  "tool_calls_made": 3,
+  "max_tool_calls": 8,
+  "retries": 0,
+  "max_retries": 2,
+  "tokens_used": 4515,
+  "token_budget": 24000,
+  "started_at": "2026-09-19T00:38:17.619883Z",
+  "updated_at": "2026-09-19T00:38:17.622797Z",
+  "deadline_at": "2026-09-19T00:40:17.619883Z",
+  "error": null,
+  "seen_tool_calls": [
+    "49360dd0f5150e829fae7a33b7e4820bb4892f078c5e853bc7f724cc86aedb43",
+    "f18ab0d145e148d1aa7f9992f6401a5201ddd397916a2c7145c10b3751e0059e",
+    "4d3fd2441a372377e04426585ae179f888e10bff8f053ea86aadb41f2cbac7ff"
+  ],
+  "evidence": [
+    {
+      "evidence_id": "49360dd0f5150e829fae7a33b7e4820bb4892f078c5e853bc7f724cc86aedb43",
+      "source": "mock:abuseipdb",
+      "tool": "lookup_ip",
+      "query": {
+        "ip": "203.0.113.44"
+      },
+      "result": {
+        "ip": "203.0.113.44",
+        "provider": "mock:abuseipdb",
+        "categories": [
+          "synthetic-demo"
+        ],
+        "reported_malicious": null,
+        "reference_ids": [
+          "synthetic-not-live"
+        ],
+        "raw": {
+          "synthetic": true,
+          "label": "SYNTHETIC MOCK \u2014 not live intelligence"
+        },
+        "retrieved_at": "2026-09-19T00:38:17.621283Z"
+      },
+      "timestamp": "2026-09-19T00:38:17.621283Z",
+      "reliability": "low",
+      "supports": [],
+      "contradicts": []
+    },
+    {
+      "evidence_id": "f18ab0d145e148d1aa7f9992f6401a5201ddd397916a2c7145c10b3751e0059e",
+      "source": "mock:virustotal",
+      "tool": "lookup_hash",
+      "query": {
+        "file_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "algorithm": "sha256"
+      },
+      "result": {
+        "file_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "algorithm": "sha256",
+        "provider": "mock:virustotal",
+        "malicious_count": null,
+        "harmless_count": null,
+        "undetected_count": null,
+        "raw": {
+          "synthetic": true,
+          "label": "SYNTHETIC MOCK \u2014 not live intelligence",
+          "last_analysis_stats": null
+        },
+        "retrieved_at": "2026-09-19T00:38:17.621538Z"
+      },
+      "timestamp": "2026-09-19T00:38:17.621538Z",
+      "reliability": "low",
+      "supports": [],
+      "contradicts": []
+    },
+    {
+      "evidence_id": "4d3fd2441a372377e04426585ae179f888e10bff8f053ea86aadb41f2cbac7ff",
+      "source": "mitre-attack",
+      "tool": "search_mitre",
+      "query": {
+        "query": "Password Guessing",
+        "technique_id": null
+      },
+      "result": {
+        "query": "Password Guessing",
+        "provider": "mitre-attack",
+        "techniques": [
+          {
+            "technique_id": "T1110.001",
+            "name": "Password Guessing",
+            "tactic": "Credential Access",
+            "description": "Adversaries with no prior knowledge of legitimate credentials within the system or environment may guess passwords to attempt access to accounts. Without knowledge of the password for an account, an adversary may opt to systematically guess the password using a repetitive or iterative mechanism. An adversary may guess login credentials without prior knowledge of system or environment passwords during an operation by using a list of common passwords. Password guessing may or may not take into account the target's policies on password complexity or use policies that may lock accounts out after a number of failed attempts.\n\nGuessing passwords can be a risky option because it could cause numerous authentication failures and account lockouts, depending on the organization's login failure policies. (Citation: Cylance Cleaver)\n\nTypically, management services over commonly used ports are used when guessing passwords. Commonly targeted services include the following:\n\n* SSH (22/TCP)\n* Telnet (23/TCP)\n* FTP (21/TCP)\n* NetBIOS / SMB / Samba (139/TCP & 445/TCP)\n* LDAP (389/TCP)\n* Kerberos (88/TCP)\n* RDP / Terminal Services (3389/TCP)\n* HTTP/HTTP Management Services (80/TCP & 443/TCP)\n* MSSQL (1433/TCP)\n* Oracle (1521/TCP)\n* MySQL (3306/TCP)\n* VNC (5900/TCP)\n* SNMP (161/UDP and 162/TCP/UDP)\n\nIn addition to management services, adversaries may \"target single sign-on (SSO) and cloud-based applications utilizing federated authentication protocols,\" as well as externally facing email applications, such as Office 365.(Citation: US-CERT TA18-068A 2018). Further, adversaries may abuse network device interfaces (such as `wlanAPI`) to brute force accessible wifi-router(s) via wireless authentication protocols.(Citation: Trend Micro Emotet 2020)\n\nIn default environments, LDAP and Kerberos connection attempts are less likely to trigger events over SMB, which creates Windows \"logon failure\" event ID 4625."
+          }
+        ],
+        "retrieved_at": "2026-09-19T00:38:17.621827Z"
+      },
+      "timestamp": "2026-09-19T00:38:17.621827Z",
+      "reliability": "high",
+      "supports": [],
+      "contradicts": []
+    }
+  ],
+  "tool_history": [
+    {
+      "key": "49360dd0f5150e829fae7a33b7e4820bb4892f078c5e853bc7f724cc86aedb43",
+      "tool": "lookup_ip",
+      "arguments": {
+        "ip": "203.0.113.44"
+      },
+      "from_cache": false,
+      "evidence_id": "49360dd0f5150e829fae7a33b7e4820bb4892f078c5e853bc7f724cc86aedb43"
+    },
+    {
+      "key": "f18ab0d145e148d1aa7f9992f6401a5201ddd397916a2c7145c10b3751e0059e",
+      "tool": "lookup_hash",
+      "arguments": {
+        "file_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "algorithm": "sha256"
+      },
+      "from_cache": false,
+      "evidence_id": "f18ab0d145e148d1aa7f9992f6401a5201ddd397916a2c7145c10b3751e0059e"
+    },
+    {
+      "key": "4d3fd2441a372377e04426585ae179f888e10bff8f053ea86aadb41f2cbac7ff",
+      "tool": "search_mitre",
+      "arguments": {
+        "query": "Password Guessing",
+        "technique_id": null
+      },
+      "from_cache": false,
+      "evidence_id": "4d3fd2441a372377e04426585ae179f888e10bff8f053ea86aadb41f2cbac7ff"
+    }
+  ],
+  "model_outputs": [],
+  "repair_attempts": 0,
+  "verification": {
+    "accepted": true,
+    "issues": [],
+    "contradictions": []
+  },
+  "report": {
+    "investigation_id": "202870b281004ba6be7325984971c8f5",
+    "alert_id": "demo-synthetic-203-0-113-44",
+    "classification": "INCONCLUSIVE",
+    "severity": "medium",
+    "confidence": {
+      "method": "weighted_evidence_v1",
+      "score": 75,
+      "factors": [
+        {
+          "name": "evidence_coverage",
+          "weight": 30,
+          "satisfied": true,
+          "evidence_ids": [
+            "49360dd0f5150e829fae7a33b7e4820bb4892f078c5e853bc7f724cc86aedb43",
+            "f18ab0d145e148d1aa7f9992f6401a5201ddd397916a2c7145c10b3751e0059e"
+          ],
+          "rationale": "Every lookup-capable indicator type on the alert was looked up."
+        },
+        {
+          "name": "source_reliability",
+          "weight": 25,
+          "satisfied": false,
+          "evidence_ids": [
+            "49360dd0f5150e829fae7a33b7e4820bb4892f078c5e853bc7f724cc86aedb43",
+            "f18ab0d145e148d1aa7f9992f6401a5201ddd397916a2c7145c10b3751e0059e",
+            "4d3fd2441a372377e04426585ae179f888e10bff8f053ea86aadb41f2cbac7ff"
+          ],
+          "rationale": "Supporting evidence is not high or medium under tool policy."
+        },
+        {
+          "name": "corroboration",
+          "weight": 20,
+          "satisfied": true,
+          "evidence_ids": [
+            "49360dd0f5150e829fae7a33b7e4820bb4892f078c5e853bc7f724cc86aedb43",
+            "f18ab0d145e148d1aa7f9992f6401a5201ddd397916a2c7145c10b3751e0059e",
+            "4d3fd2441a372377e04426585ae179f888e10bff8f053ea86aadb41f2cbac7ff"
+          ],
+          "rationale": "At least two providers support the classification."
+        },
+        {
+          "name": "contradiction_penalty",
+          "weight": 15,
+          "satisfied": true,
+          "evidence_ids": [],
+          "rationale": "No stored field contradicts the classification."
+        },
+        {
+          "name": "data_completeness",
+          "weight": 10,
+          "satisfied": true,
+          "evidence_ids": [],
+          "rationale": "The alert contains an ip, hash, domain, url, or cve."
+        }
+      ]
+    },
+    "executive_summary": "Collected results are attached. Classification uses stored fields only.",
+    "affected_assets": [
+      "lab-workstation-01"
+    ],
+    "indicators": [
+      {
+        "type": "hash",
+        "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "evidence_ids": [
+          "f18ab0d145e148d1aa7f9992f6401a5201ddd397916a2c7145c10b3751e0059e"
+        ]
+      },
+      {
+        "type": "ip",
+        "value": "203.0.113.44",
+        "evidence_ids": [
+          "49360dd0f5150e829fae7a33b7e4820bb4892f078c5e853bc7f724cc86aedb43"
+        ]
+      }
+    ],
+    "evidence": [
+      {
+        "evidence_id": "49360dd0f5150e829fae7a33b7e4820bb4892f078c5e853bc7f724cc86aedb43",
+        "source": "mock:abuseipdb",
+        "tool": "lookup_ip",
+        "query": {
+          "ip": "203.0.113.44"
+        },
+        "result": {
+          "ip": "203.0.113.44",
+          "provider": "mock:abuseipdb",
+          "categories": [
+            "synthetic-demo"
+          ],
+          "reported_malicious": null,
+          "reference_ids": [
+            "synthetic-not-live"
+          ],
+          "raw": {
+            "synthetic": true,
+            "label": "SYNTHETIC MOCK \u2014 not live intelligence"
+          },
+          "retrieved_at": "2026-09-19T00:38:17.621283Z"
+        },
+        "timestamp": "2026-09-19T00:38:17.621283Z",
+        "reliability": "low",
+        "supports": [],
+        "contradicts": []
+      },
+      {
+        "evidence_id": "f18ab0d145e148d1aa7f9992f6401a5201ddd397916a2c7145c10b3751e0059e",
+        "source": "mock:virustotal",
+        "tool": "lookup_hash",
+        "query": {
+          "file_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "algorithm": "sha256"
+        },
+        "result": {
+          "file_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "algorithm": "sha256",
+          "provider": "mock:virustotal",
+          "malicious_count": null,
+          "harmless_count": null,
+          "undetected_count": null,
+          "raw": {
+            "synthetic": true,
+            "label": "SYNTHETIC MOCK \u2014 not live intelligence",
+            "last_analysis_stats": null
+          },
+          "retrieved_at": "2026-09-19T00:38:17.621538Z"
+        },
+        "timestamp": "2026-09-19T00:38:17.621538Z",
+        "reliability": "low",
+        "supports": [],
+        "contradicts": []
+      },
+      {
+        "evidence_id": "4d3fd2441a372377e04426585ae179f888e10bff8f053ea86aadb41f2cbac7ff",
+        "source": "mitre-attack",
+        "tool": "search_mitre",
+        "query": {
+          "query": "Password Guessing",
+          "technique_id": null
+        },
+        "result": {
+          "query": "Password Guessing",
+          "provider": "mitre-attack",
+          "techniques": [
+            {
+              "technique_id": "T1110.001",
+              "name": "Password Guessing",
+              "tactic": "Credential Access",
+              "description": "Adversaries with no prior knowledge of legitimate credentials within the system or environment may guess passwords to attempt access to accounts. Without knowledge of the password for an account, an adversary may opt to systematically guess the password using a repetitive or iterative mechanism. An adversary may guess login credentials without prior knowledge of system or environment passwords during an operation by using a list of common passwords. Password guessing may or may not take into account the target's policies on password complexity or use policies that may lock accounts out after a number of failed attempts.\n\nGuessing passwords can be a risky option because it could cause numerous authentication failures and account lockouts, depending on the organization's login failure policies. (Citation: Cylance Cleaver)\n\nTypically, management services over commonly used ports are used when guessing passwords. Commonly targeted services include the following:\n\n* SSH (22/TCP)\n* Telnet (23/TCP)\n* FTP (21/TCP)\n* NetBIOS / SMB / Samba (139/TCP & 445/TCP)\n* LDAP (389/TCP)\n* Kerberos (88/TCP)\n* RDP / Terminal Services (3389/TCP)\n* HTTP/HTTP Management Services (80/TCP & 443/TCP)\n* MSSQL (1433/TCP)\n* Oracle (1521/TCP)\n* MySQL (3306/TCP)\n* VNC (5900/TCP)\n* SNMP (161/UDP and 162/TCP/UDP)\n\nIn addition to management services, adversaries may \"target single sign-on (SSO) and cloud-based applications utilizing federated authentication protocols,\" as well as externally facing email applications, such as Office 365.(Citation: US-CERT TA18-068A 2018). Further, adversaries may abuse network device interfaces (such as `wlanAPI`) to brute force accessible wifi-router(s) via wireless authentication protocols.(Citation: Trend Micro Emotet 2020)\n\nIn default environments, LDAP and Kerberos connection attempts are less likely to trigger events over SMB, which creates Windows \"logon failure\" event ID 4625."
+            }
+          ],
+          "retrieved_at": "2026-09-19T00:38:17.621827Z"
+        },
+        "timestamp": "2026-09-19T00:38:17.621827Z",
+        "reliability": "high",
+        "supports": [],
+        "contradicts": []
+      }
+    ],
+    "mitre_attack": [
+      {
+        "technique_id": "T1110.001",
+        "technique_name": "Password Guessing",
+        "tactic": "Credential Access",
+        "evidence_ids": [
+          "4d3fd2441a372377e04426585ae179f888e10bff8f053ea86aadb41f2cbac7ff"
+        ]
+      }
+    ],
+    "timeline": [
+      {
+        "timestamp": "2026-09-19T00:38:17.621283Z",
+        "description": "Stored tool result.",
+        "evidence_ids": [
+          "49360dd0f5150e829fae7a33b7e4820bb4892f078c5e853bc7f724cc86aedb43"
+        ]
+      },
+      {
+        "timestamp": "2026-09-19T00:38:17.621538Z",
+        "description": "Stored tool result.",
+        "evidence_ids": [
+          "f18ab0d145e148d1aa7f9992f6401a5201ddd397916a2c7145c10b3751e0059e"
+        ]
+      },
+      {
+        "timestamp": "2026-09-19T00:38:17.621827Z",
+        "description": "Stored tool result.",
+        "evidence_ids": [
+          "4d3fd2441a372377e04426585ae179f888e10bff8f053ea86aadb41f2cbac7ff"
+        ]
+      }
+    ],
+    "recommended_actions": [],
+    "analyst_notes": "",
+    "limitations": [
+      "Classification uses stored tool fields only. No facts were added outside those fields.",
+      "At least one source is low or unknown reliability under tool policy.",
+      "Stored fields do not support one benign or malicious verdict."
+    ]
+  },
+  "review": null
+}

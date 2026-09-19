@@ -314,14 +314,31 @@ Not done, and not claimed:
 
 ### 10. Portfolio polish
 
+Status: done for the criteria below.
+
 README, diagrams, demo, example investigation, docs.
 
 Acceptance:
 
-- A reviewer can clone, start Compose, submit the example synthetic alert, and read tools, evidence, MITRE, report, and confidence without a paid key (`demo_mode` and mock providers from milestone 3).
-- The README status section is updated to match what the commands actually do.
-- Screenshots are taken from that run, not mocked in an image editor.
-- `docs/adding-tools.md` tells a contributor how to add a tool without granting shell or arbitrary HTTP.
+- [x] A reviewer can submit `examples/synthetic-alert.json` with `SENTINEL_DEMO_MODE=true` and no paid key, then read tools, evidence, MITRE, the report, and confidence. That path was run with uvicorn on 2026-09-19. Compose is documented and was not booted here.
+- [x] The README status section is updated to match what the commands actually do.
+- [x] Screenshots are taken from that run, not mocked in an image editor.
+- [x] `docs/adding-tools.md` tells a contributor how to add a tool without granting shell or arbitrary HTTP.
+
+Also done:
+
+- `SENTINEL_DEMO_MODE` selects `ScriptedDemoModel` for `POST /investigations`. It reuses `plan_tools` from `src/sentinel/evals/model.py`. It is not `OpenAiCompatibleClient`. With the flag off, a missing LLM setting is still 503 `not_configured` and nothing is stored.
+- The example alert is `examples/synthetic-alert.json`. The 2026-09-19 uvicorn run is `examples/investigation-response.json`. Status `AWAITING_REVIEW`. Classification `INCONCLUSIVE`. Mock verdict fields stay null.
+- Screenshots of `GET /docs` and of that report response are in `docs/images/`. Compose was not booted in that environment. The README says so.
+- `verify_report`, the confidence formula, and the injection tests were not weakened. Eval counts were not pasted into the README.
+
+Not done, and not claimed:
+
+- Compose was not started here, so this branch has no recorded Compose log.
+- No jailbreak detector and no denylist. The injection tests still use a fake model that follows the payload.
+- No remediation executor, including a stub.
+- Provider backoff, Redis, pgvector, and the OpenAI SDK are still absent.
+- CI does not fail on a classification agreement threshold.
 
 Definition of done for the finished product, not for this branch: a reviewer clones the repo, runs it locally without paid API keys, submits a synthetic alert, watches an investigation, inspects tools, evidence, MITRE mapping, the report, and the confidence breakdown, records a review, and runs evals and tests.
 

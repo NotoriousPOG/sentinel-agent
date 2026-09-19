@@ -1,0 +1,37 @@
+date: 2026-09-19T00:38:17Z
+host: http://127.0.0.1:8091
+SENTINEL_DEMO_MODE=true
+LLM, AbuseIPDB, and VirusTotal keys: unset
+database: sqlite+pysqlite:////tmp/sentinel-demo.db (migrated with alembic upgrade head)
+
+GET /health
+HTTP/1.1 200 OK
+{"status":"ok","service":"sentinel-agent","version":"0.1.0","demo_mode":true}
+
+POST /alerts
+body: examples/synthetic-alert.json
+HTTP/1.1 201 Created
+alert_id: demo-synthetic-203-0-113-44
+idempotent_replay: false
+
+POST /investigations
+body: {"alert_id":"demo-synthetic-203-0-113-44"}
+HTTP/1.1 201 Created
+investigation_id: 202870b281004ba6be7325984971c8f5
+status: AWAITING_REVIEW
+error: null
+tools: lookup_ip, lookup_hash, search_mitre
+sources: mitre-attack, mock:abuseipdb, mock:virustotal
+report.classification: INCONCLUSIVE
+
+GET /investigations/202870b281004ba6be7325984971c8f5/report
+HTTP/1.1 200 OK
+classification: INCONCLUSIVE
+confidence.method: weighted_evidence_v1
+confidence.score: 75
+mitre_attack: T1110.001
+lookup_ip.reported_malicious: null
+lookup_hash.malicious_count: null
+
+The response body is examples/investigation-response.json.
+Docker Compose was not started for this run.

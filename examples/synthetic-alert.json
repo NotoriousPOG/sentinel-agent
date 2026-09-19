@@ -1,0 +1,15 @@
+{
+  "source": "generic_json",
+  "payload": {
+    "alert_id": "demo-synthetic-203-0-113-44",
+    "timestamp": "2026-09-19T00:00:00Z",
+    "source": "synthetic-demo",
+    "title": "Synthetic password guessing against a documentation address",
+    "description": "This alert is synthetic. It is not a customer incident and not live threat intelligence. The address is from the documentation range in RFC 5737. The file hash is a placeholder, not a published sample.",
+    "severity": "medium",
+    "hostname": "lab-workstation-01",
+    "source_ip": "203.0.113.44",
+    "file_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "process": "sshd"
+  }
+}
