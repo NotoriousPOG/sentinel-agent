@@ -24,17 +24,17 @@ flowchart TD
   review --> done[COMPLETE only if the conclusion is approved]
 ```
 
-LangGraph is not installed. There is no Redis, no pgvector, and no remediation executor. The control-plane write-up is [docs/architecture.md](docs/architecture.md).
+The investigation is a short list of states in code, not a graph library. There is no job queue, no search over similar past alerts, and no code that blocks an address or isolates a host. How those states are allowed to change is written in [docs/architecture.md](docs/architecture.md).
 
 ## Demo
 
-`SENTINEL_DEMO_MODE=true` does two things. IP and hash tools use providers named `mock:abuseipdb` and `mock:virustotal`. `POST /investigations` uses `ScriptedDemoModel` in `src/sentinel/agents/demo_model.py`, which reuses the planning rules in `src/sentinel/evals/model.py`. That class does not read dataset labels and it is not `OpenAiCompatibleClient`. No LLM base URL, key, or model is required.
+`SENTINEL_DEMO_MODE=true` does two things. IP and hash tools use providers named `mock:abuseipdb` and `mock:virustotal`. `POST /investigations` uses `ScriptedDemoModel` in `src/sentinel/agents/demo_model.py`, which reuses the planning rules in `src/sentinel/evals/model.py`. That class does not read dataset labels and it does not call a hosted model. No LLM base URL, key, or model is required.
 
 CVE lookup, DNS, and MITRE ignore the flag. A failed live call is not replaced with a mock. With `demo_mode` off, a missing LLM setting is still HTTP 503 `not_configured`, and nothing is stored.
 
 The mock rows leave `reported_malicious` and the hash counts null. The pipeline does not turn that into a malicious verdict. The example below is `INCONCLUSIVE`.
 
-A separate local AWS walkthrough is in [examples/floci/README.md](examples/floci/README.md). It stores a synthetic GuardDuty finding in Floci and posts that finding to this API. Sentinel still uses `SENTINEL_DEMO_MODE=true` and `ScriptedDemoModel`. Floci does not execute the model. Bedrock AgentCore is not used. The GuardDuty mapper in that demo is not a full integration.
+A separate local AWS walkthrough is in [examples/floci/README.md](examples/floci/README.md). It stores a synthetic GuardDuty finding in Floci and posts that finding to this API. Sentinel still uses `SENTINEL_DEMO_MODE=true` and `ScriptedDemoModel`. Floci does not execute the model. The investigation is not run on Amazon Bedrock. The GuardDuty mapper in that demo is not a full integration.
 
 Screenshots below are from the 2026-09-19 uvicorn run of the generic JSON example, not from an image editor. Interactive docs: `GET /docs`.
 
@@ -140,7 +140,7 @@ An evidence record is what a tool returned, plus source, time, and reliability. 
 
 The control is separation plus the closed tool set. Untrusted alert fields are listed in `UNTRUSTED_ALERT_FIELDS`. They are not interpolated into the system prompt. They sit in a user message between `<<<UNTRUSTED_DATA>>>` and `<<<END_UNTRUSTED_DATA>>>`. Tools cannot shell out and cannot fetch arbitrary URLs, so an instruction in a log has no capability to bind to.
 
-There is no detector and no denylist. The injection tests use a fake model that follows the payload on purpose. A passing test means the executor refused an unknown tool or ignored the text when setting classification. It does not mean a live model will ignore hostile text.
+There is no classifier that flags hostile text, and no list of blocked phrases. The injection tests use a fake model that follows the payload on purpose. A passing test means the executor refused an unknown tool or ignored the text when setting classification. It does not mean a live model will ignore hostile text.
 
 Details and the corpus are in [docs/security.md](docs/security.md) and [docs/threat-model.md](docs/threat-model.md).
 
@@ -158,7 +158,7 @@ It prints the counts and writes `report.json` and `report.md` in that directory.
 
 Secrets are `SecretStr`. A provider key is a request header. It is not copied into results, logs, or exception text. Database access goes through SQLAlchemy. Alert strings are not concatenated into SQL. `extra=forbid` drops unexpected JSON fields.
 
-There is no remediation executor. The Floci demo defines `isolate_instance` in `examples/floci/runner.py`, and that function raises if called. `RecommendedAction.requires_human_approval` is the literal `True`. Review fields named `execute` or `auto_remediate` fail validation.
+There is no code that blocks an address or isolates a host. The Floci demo defines `isolate_instance` in `examples/floci/runner.py`, and that function raises if called. `RecommendedAction.requires_human_approval` is the literal `True`. Review fields named `execute` or `auto_remediate` fail validation.
 
 `GET /metrics` and info logs omit alert bodies, command lines, usernames, and keys. Provider `raw` is not logged at info.
 
@@ -175,7 +175,7 @@ Not in this repository, and not started:
 - Source adapters for CrowdStrike, Defender, Elastic, and Splunk. The classes exist and raise. GuardDuty has a minimal mapper for one documented finding shape, described in [examples/floci/README.md](examples/floci/README.md). That is not a GuardDuty integration.
 - A separate process that could apply a remediation action only after a stored review approves that action id. This tree does not contain that process.
 - Provider backoff, a readiness check that touches PostgreSQL, and the rest of the Enterprise ATT&CK catalog.
-- Redis, pgvector, a Prometheus client, LangGraph, and an OpenAI SDK. The reasons they were left out are in [docs/architecture.md](docs/architecture.md).
+- A job queue, a search over similar past alerts, and a graph library. Process counters stay in this process. Model calls do not use OpenAI's own client library. The reasons they were left out are in [docs/architecture.md](docs/architecture.md).
 
 A jailbreak detector is not on this list. The intended control remains separation and the closed tool set.
 
@@ -185,8 +185,8 @@ A jailbreak detector is not on this list. The intended control remains separatio
 - Mock IP and hash results leave verdict fields null. Alerts that only have those indicators stay `INCONCLUSIVE` unless some other stored field supports a class. That is the pipeline, not a polished detection story.
 - `demo_mode` does not mock CVE, DNS, or MITRE. An alert with a domain will call the resolver. An alert with a CVE will call OSV unless a test injects a transport.
 - The ATT&CK file is a 19-technique subset. A search miss means the technique is not in the subset.
-- Wazuh support is a normalizer for the documented JSON cited in `tests/wazuh_fixtures.py`. There is no manager client.
-- GuardDuty support is the same kind of limit: one documented finding object, no detector client, no EventBridge envelope. See [examples/floci/README.md](examples/floci/README.md).
+- Wazuh support is a normalizer for the documented JSON cited in `tests/wazuh_fixtures.py`. There is no client that talks to a Wazuh manager.
+- GuardDuty support is the same kind of limit: one documented finding object. Nothing queries GuardDuty for more, and the accepted body is that finding, not the event wrapper around it. See [examples/floci/README.md](examples/floci/README.md).
 - The API is synchronous. One investigation runs inside the request. There is no queue.
 - `GET /metrics` is this process only. A restart clears it. Estimated cost is `0` unless you set `SENTINEL_USD_PER_MILLION_TOKENS`. That variable is not a model price.
 - SQLite is for unit tests and a casual local file. It is not a supported deployment.
