@@ -118,8 +118,9 @@ def put_json(store: ObjectStore, bucket: str, key: str, document: Mapping[str, A
 class UrllibJsonClient:
     """Stdlib client for the local Sentinel process. Timeouts are fixed."""
 
-    def __init__(self, timeout: float = 60.0) -> None:
+    def __init__(self, timeout: float = 60.0, api_key: str | None = None) -> None:
         self._timeout = timeout
+        self._api_key = api_key
 
     def request(
         self,
@@ -129,11 +130,14 @@ class UrllibJsonClient:
         json_body: Mapping[str, Any] | None = None,
     ) -> JsonResponse:
         data = None if json_body is None else json.dumps(json_body).encode("utf-8")
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
         request = urllib.request.Request(
             url,
             data=data,
             method=method,
-            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            headers=headers,
         )
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
@@ -313,7 +317,7 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     store = floci_s3_client(args.endpoint)
-    http = UrllibJsonClient()
+    http = UrllibJsonClient(api_key=os.environ.get("SENTINEL_API_KEY") or None)
     if args.command == "ingest":
         result = publish_finding(
             store=store,

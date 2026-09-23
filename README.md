@@ -76,7 +76,9 @@ SENTINEL_DEMO_MODE=true uvicorn sentinel.api.app:app --host 127.0.0.1 --port 809
 
 Health: `GET /health`. Docs: `GET /docs`.
 
-`POST /alerts` takes `{"source": "generic_json" | "wazuh" | "aws_guardduty", "payload": { ... }}`. `source` defaults to `generic_json`. `aws_guardduty` expects one GuardDuty finding object, not an EventBridge envelope. A validation failure is HTTP 422 and does not echo the submitted value.
+`POST /alerts` takes `{"source": "generic_json" | "wazuh" | "aws_guardduty" | "crowdstrike_falcon" | "microsoft_defender" | "elastic" | "splunk", "payload": { ... }}`. `source` defaults to `generic_json`. Each vendor source expects one documented object, not a list wrapper or an event envelope. A validation failure is HTTP 422 and does not echo the submitted value.
+
+When `SENTINEL_API_KEY` is set, alert, investigation, and metrics routes require `Authorization: Bearer` or `X-API-Key`. `GET /health` and `GET /ready` stay open. Unit tests leave the variable unset. Compose sets a local-only key, `sentinel-local-demo`.
 
 `POST /investigations` takes `{"alert_id": "..."}` for an alert that was already stored. A missing alert is 404 `alert_not_found`. With `demo_mode` off, a missing LLM base URL, key, or model is 503 `not_configured` and nothing is stored.
 
@@ -97,24 +99,24 @@ The API listens on `127.0.0.1:8091`. Postgres listens on `127.0.0.1:54329`. The 
 `examples/synthetic-alert.json` is a synthetic generic JSON alert. The address is from the RFC 5737 documentation range. The file hash is a placeholder, not a published sample. Commands, the captured body, and the date are in [examples/README.md](examples/README.md).
 
 ```bash
-curl -sS -H 'Content-Type: application/json' \
+curl -sS -H 'Content-Type: application/json' -H 'Authorization: Bearer sentinel-local-demo' \
   --data-binary @examples/synthetic-alert.json \
   http://127.0.0.1:8091/alerts
 
-curl -sS -H 'Content-Type: application/json' \
+curl -sS -H 'Content-Type: application/json' -H 'Authorization: Bearer sentinel-local-demo' \
   -d '{"alert_id":"demo-synthetic-203-0-113-44"}' \
   http://127.0.0.1:8091/investigations
 
-curl -sS -H 'Content-Type: application/json' \
+curl -sS -H 'Content-Type: application/json' -H 'Authorization: Bearer sentinel-local-demo' \
   --data-binary @examples/wazuh-synthetic-alert.json \
   http://127.0.0.1:8091/alerts
 
-curl -sS -H 'Content-Type: application/json' \
+curl -sS -H 'Content-Type: application/json' -H 'Authorization: Bearer sentinel-local-demo' \
   -d '{"alert_id":"demo-wazuh-192-0-2-50"}' \
   http://127.0.0.1:8091/investigations
 ```
 
-Run those with `SENTINEL_DEMO_MODE=true` and no API keys, or use Compose which defaults that flag to true. On 2026-09-22T08:53:34Z `docker compose up --build` returned HTTP 201 for both examples. The generic JSON investigation status is `AWAITING_REVIEW`. Classification is `SUSPICIOUS` because the fixture IP and hash are labeled synthetic hits and `mock:` reliability is low. Confidence is 75 (`weighted_evidence_v1`). Approving the conclusion moved that investigation to `COMPLETE`. The Wazuh example classified `SUSPICIOUS` with confidence 55. The generic JSON body, indented and not rewritten, is [examples/investigation-response.json](examples/investigation-response.json). The terminal record is [examples/demo-transcript.txt](examples/demo-transcript.txt).
+Run those with `SENTINEL_DEMO_MODE=true`. Omit the bearer header when `SENTINEL_API_KEY` is unset. Compose sets that variable to `sentinel-local-demo`. On 2026-09-22T08:53:34Z `docker compose up --build` returned HTTP 201 for both examples. The generic JSON investigation status is `AWAITING_REVIEW`. Classification is `SUSPICIOUS` because the fixture IP and hash are labeled synthetic hits and `mock:` reliability is low. Confidence is 75 (`weighted_evidence_v1`). Approving the conclusion moved that investigation to `COMPLETE`. The Wazuh example classified `SUSPICIOUS` with confidence 55. The generic JSON body, indented and not rewritten, is [examples/investigation-response.json](examples/investigation-response.json). The terminal record is [examples/demo-transcript.txt](examples/demo-transcript.txt).
 
 The scripted planner called `lookup_ip`, `lookup_hash`, and `search_mitre` on the generic example, and `lookup_ip` plus `search_mitre` on the Wazuh example. IP and hash rows are labeled `mock:`. The MITRE query was `Password Guessing`, taken from the title by a fixed keyword table. The local subset returned `T1110.001`. That is a catalog hit, not a claim that a host was attacked. The narrative is the constant "Collected results are attached. Classification uses stored fields only."
 

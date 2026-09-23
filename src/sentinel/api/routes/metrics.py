@@ -1,12 +1,13 @@
 """Process counters. This route does not read alerts or the database."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 
+from sentinel.api.auth import require_api_key
 from sentinel.config.settings import get_settings
 from sentinel.observability.metrics import snapshot
 
-router = APIRouter(tags=["metrics"])
+router = APIRouter(tags=["metrics"], dependencies=[Depends(require_api_key)])
 
 
 class MetricsResponse(BaseModel):

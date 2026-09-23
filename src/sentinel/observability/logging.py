@@ -154,6 +154,7 @@ def _secret_values() -> tuple[str, ...]:
         settings.llm_api_key,
         settings.abuseipdb_api_key,
         settings.virustotal_api_key,
+        settings.api_key,
     ):
         text = configured_secret(item)
         if text:

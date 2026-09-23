@@ -19,14 +19,16 @@ SENTINEL_DEMO_MODE=true uvicorn sentinel.api.app:app --host 127.0.0.1 --port 809
 ```
 
 ```bash
-curl -sS -H 'Content-Type: application/json' \
+curl -sS -H 'Content-Type: application/json' -H "Authorization: Bearer ${SENTINEL_API_KEY}" \
   --data-binary @examples/synthetic-alert.json \
   http://127.0.0.1:8091/alerts
 
-curl -sS -H 'Content-Type: application/json' \
+curl -sS -H 'Content-Type: application/json' -H "Authorization: Bearer ${SENTINEL_API_KEY}" \
   -d '{"alert_id":"demo-synthetic-203-0-113-44"}' \
   http://127.0.0.1:8091/investigations
 ```
+
+Omit the bearer header when `SENTINEL_API_KEY` is unset. Compose sets it to `sentinel-local-demo`.
 
 `GET /investigations/{id}/report` returns the verified report. `POST /investigations/{id}/review` is how an analyst approves the conclusion. These commands do not approve it.
 

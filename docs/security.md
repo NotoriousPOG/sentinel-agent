@@ -19,6 +19,7 @@ Operator notes for controls the test suite checks. Claims without a test are not
 | Package source does not call `subprocess`, `os.system`, `os.popen`, `eval(`, or `exec(`. | `test_package_source_does_not_invoke_a_shell` |
 | Provider HTTP is allowlisted. AbuseIPDB’s URL is the constant, not alert text. DNS does not HTTP-fetch the name. An OSV lookup makes one transport call, to the vulnerability URL, and stores reference strings. | `test_allowlist_rejects_other_schemes_and_hosts`, `test_abuseipdb_does_not_invent_a_verdict_or_put_the_key_in_the_url`, `test_dns_uses_the_injected_resolver_and_does_not_fetch`, `test_osv_does_not_invent_cvss_or_fetch_reference_urls` |
 | API keys are not in `repr`, `/health`, tool results, or logs. | `test_api_key_is_not_in_repr`, `test_health_does_not_echo_secrets`, `test_provider_key_is_absent_from_tool_result_and_logs` |
+| When `SENTINEL_API_KEY` is set, alert, investigation, and metrics routes reject a missing or wrong key. `/health` and `/ready` stay open. The presented key is not in the 401 body or the log. | `test_data_routes_reject_a_missing_or_wrong_key`, `test_bearer_and_header_are_accepted`, `test_health_and_ready_stay_open_when_a_key_is_set` |
 | A configured `SecretStr` does not appear in logs captured during a fake investigation. The alert command line is not logged at info. | `test_fake_investigation_hides_secret_and_command_line` |
 | One low-reliability source cannot score 100. The score is the factor total. | `test_one_low_reliability_source_cannot_score_100` |
 

@@ -16,6 +16,7 @@ from sentinel.errors import (
     InvestigationNotFound,
     ReportNotFound,
     ReviewNotAllowed,
+    Unauthorized,
 )
 from sentinel.schemas.errors import (
     AlertNotFoundBody,
@@ -24,6 +25,7 @@ from sentinel.schemas.errors import (
     NotConfiguredBody,
     ReportNotFoundBody,
     ReviewNotAllowedBody,
+    UnauthorizedBody,
     ValidationErrorBody,
 )
 from sentinel.services.validation import issues_from_error_list
@@ -70,6 +72,10 @@ def register_exception_handlers(application: FastAPI) -> None:
     async def on_review_not_allowed(_request: Request, _exc: ReviewNotAllowed) -> JSONResponse:
         body = ReviewNotAllowedBody().model_dump(mode="json")
         return JSONResponse(status_code=409, content=body)
+
+    @application.exception_handler(Unauthorized)
+    async def on_unauthorized(_request: Request, _exc: Unauthorized) -> JSONResponse:
+        return JSONResponse(status_code=401, content=UnauthorizedBody().model_dump(mode="json"))
 
     @application.exception_handler(ConfigurationError)
     async def on_not_configured(_request: Request, exc: ConfigurationError) -> JSONResponse:

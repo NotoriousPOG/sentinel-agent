@@ -59,6 +59,14 @@ class ReviewNotAllowedBody(BaseModel):
     code: Literal["review_not_allowed"] = "review_not_allowed"
 
 
+class UnauthorizedBody(BaseModel):
+    """The API key is configured and this request did not present it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    error: Literal["unauthorized"] = "unauthorized"
+
+
 class NotConfiguredBody(BaseModel):
     """A required setting is missing. The body names the provider, not the secret."""
 

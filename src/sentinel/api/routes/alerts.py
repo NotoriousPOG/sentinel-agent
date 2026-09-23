@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
+from sentinel.api.auth import require_api_key
 from sentinel.api.deps import get_db
 from sentinel.errors import (
     AlertNotFound,
@@ -29,7 +30,7 @@ from sentinel.services.sources import (
 )
 from sentinel.storage.alerts import AlertRepository, aware_utc
 
-router = APIRouter(tags=["alerts"])
+router = APIRouter(tags=["alerts"], dependencies=[Depends(require_api_key)])
 
 _ADAPTERS: dict[str, SourceAdapter] = {
     GenericJsonAdapter.name: GenericJsonAdapter(),

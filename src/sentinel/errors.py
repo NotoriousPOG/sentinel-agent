@@ -80,6 +80,16 @@ class UnknownTool(SentinelError):
         super().__init__("unknown tool")
 
 
+class Unauthorized(SentinelError):
+    """The API key is configured and the request did not present it.
+
+    The message does not include the presented credential.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("unauthorized")
+
+
 class ConfigurationError(SentinelError):
     """A provider has no credential. This is not a benign verdict."""
 

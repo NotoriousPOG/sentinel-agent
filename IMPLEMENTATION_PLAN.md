@@ -388,6 +388,25 @@ Not done, and not claimed:
 - No jailbreak detector.
 - These mappers are not product integrations. Wazuh still has no manager client.
 
+### 13. API credential
+
+Status: done for the criteria below.
+
+Optional API key for data routes. Health checks stay open. No remediation executor and no queue.
+
+Acceptance:
+
+- [x] When `SENTINEL_API_KEY` is unset, existing routes behave as before.
+- [x] When it is set, `/alerts`, `/investigations`, and `/metrics` require `Authorization: Bearer` or `X-API-Key`. A mismatch is 401 `unauthorized` and does not echo the credential.
+- [x] `/health` and `/ready` do not require the key. Compose publishes the API on `127.0.0.1` and sets a local-only key.
+- [x] The configured key is stripped from `sentinel` log lines.
+
+Not done, and not claimed:
+
+- No remediation process. Approving a recommendation still stores the decision and runs nothing.
+- No job queue, no similar-alert search, and no graph library.
+- No jailbreak detector. No Wazuh manager client. No web UI.
+
 Definition of done for the finished product, not for this branch: a reviewer clones the repo, runs it locally without paid API keys, submits a synthetic alert, watches an investigation, inspects tools, evidence, MITRE mapping, the report, and the confidence breakdown, records a review, and runs evals and tests.
 
 ## Dependencies

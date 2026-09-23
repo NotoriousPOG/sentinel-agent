@@ -26,6 +26,8 @@ services:
       # Local Compose defaults to the scripted demo model and fixture mocks.
       # Override: SENTINEL_DEMO_MODE=false docker compose up --build
       SENTINEL_DEMO_MODE: ${SENTINEL_DEMO_MODE:-true}
+      # Local Compose credential only. Not a production secret.
+      SENTINEL_API_KEY: ${SENTINEL_API_KEY:-sentinel-local-demo}
       SENTINEL_LOG_LEVEL: INFO
     depends_on:
       postgres:

@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+pysqlite:///./sentinel.db"
     log_level: LogLevel = "INFO"
     demo_mode: bool = False
+    # Unset means data routes do not check a credential. /health and /ready never do.
+    api_key: SecretStr | None = None
 
     llm_base_url: str | None = None
     llm_api_key: SecretStr | None = None
@@ -96,6 +98,7 @@ class Settings(BaseSettings):
         "llm_model",
         "abuseipdb_api_key",
         "virustotal_api_key",
+        "api_key",
         mode="before",
     )
     @classmethod

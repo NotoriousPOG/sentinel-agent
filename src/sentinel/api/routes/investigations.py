@@ -11,6 +11,7 @@ from sentinel.agents.executor import run_investigation
 from sentinel.agents.reporting import published_report
 from sentinel.agents.review import apply_analyst_review, review_status
 from sentinel.agents.transitions import new_investigation
+from sentinel.api.auth import require_api_key
 from sentinel.api.deps import get_db
 from sentinel.config.settings import get_settings
 from sentinel.errors import (
@@ -36,7 +37,7 @@ from sentinel.storage.alerts import AlertRepository
 from sentinel.storage.investigations import InvestigationRepository
 from sentinel.tools.registry import build_registry
 
-router = APIRouter(tags=["investigations"])
+router = APIRouter(tags=["investigations"], dependencies=[Depends(require_api_key)])
 
 
 def _alert(record: AlertRecord) -> NormalizedAlert:
