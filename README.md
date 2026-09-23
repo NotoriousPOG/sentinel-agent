@@ -28,15 +28,15 @@ The investigation is a short list of states in code, not a graph library. There 
 
 ## Demo
 
-`SENTINEL_DEMO_MODE=true` does two things. IP and hash tools use providers named `mock:abuseipdb` and `mock:virustotal`. `POST /investigations` uses `ScriptedDemoModel` in `src/sentinel/agents/demo_model.py`, which reuses the planning rules in `src/sentinel/evals/model.py`. That class does not read dataset labels and it does not call a hosted model. No LLM base URL, key, or model is required.
+`SENTINEL_DEMO_MODE=true` selects mock providers named `mock:abuseipdb`, `mock:virustotal`, `mock:osv`, and `mock:dns`. `POST /investigations` uses `ScriptedDemoModel` in `src/sentinel/agents/demo_model.py`, which reuses the planning rules in `src/sentinel/evals/model.py`. That class does not read dataset labels and it does not call a hosted model. No LLM base URL, key, or model is required.
 
-CVE lookup, DNS, and MITRE ignore the flag. A failed live call is not replaced with a mock. With `demo_mode` off, a missing LLM setting is still HTTP 503 `not_configured`, and nothing is stored.
+MITRE search still reads the checked-in subset. A failed live call is not replaced with a mock. With `demo_mode` off, a missing LLM setting is still HTTP 503 `not_configured`, and nothing is stored.
 
-The mock rows leave `reported_malicious` and the hash counts null. The pipeline does not turn that into a malicious verdict. The example below is `INCONCLUSIVE`.
+Listed fixture indicators in `src/sentinel/services/providers/fixtures.py` may carry canned verdicts. Those rows stay `mock:` and `low` reliability, so a fixture `reported_malicious: true` classifies `SUSPICIOUS`, not `MALICIOUS`. An unlisted IP or hash stays unknown. Local Compose defaults this flag to true.
 
 A separate local AWS walkthrough is in [examples/floci/README.md](examples/floci/README.md). It stores a synthetic GuardDuty finding in Floci and posts that finding to this API. Sentinel still uses `SENTINEL_DEMO_MODE=true` and `ScriptedDemoModel`. Floci does not execute the model. The investigation is not run on Amazon Bedrock. The GuardDuty mapper in that demo is not a full integration.
 
-Screenshots below are from the 2026-09-19 uvicorn run of the generic JSON example, not from an image editor. Interactive docs: `GET /docs`.
+The OpenAPI screenshot is from the 2026-09-19 uvicorn run. The report screenshot on that date showed `INCONCLUSIVE` because mock verdict fields were still null. Interactive docs: `GET /docs`. The 2026-09-22 Compose capture is [examples/investigation-response.json](examples/investigation-response.json).
 
 ![OpenAPI documentation](docs/images/demo-openapi.png)
 
@@ -51,7 +51,7 @@ What the code does today:
 - `GET /investigations/{id}`, `/evidence`, and `/report` reload stored state. Evidence keeps one row per provider. The report route returns 404 `report_not_found` when verification has not accepted a report.
 - `POST /investigations/{id}/review` stores an `AnalystReview`. Notes are required. Approving the conclusion is the only path to `COMPLETE`. Approving remediation does not run an action.
 - Tools: `lookup_ip`, `lookup_hash`, `lookup_cve`, `search_mitre`, `lookup_domain`. Unknown names are refused. There is no shell and no URL-fetch tool.
-- AbuseIPDB and VirusTotal run only when their keys are set and `demo_mode` is off. CVE uses OSV. MITRE search reads a checked-in Enterprise ATT&CK 19.2 subset. DNS uses a resolver and does not HTTP-fetch the name.
+- AbuseIPDB and VirusTotal run only when their keys are set and `demo_mode` is off. CVE uses OSV when the flag is off. MITRE search reads a checked-in Enterprise ATT&CK 19.2 subset. DNS uses a resolver when the flag is off and does not HTTP-fetch the name. `demo_mode` selects labeled mocks for IP, hash, CVE, and DNS.
 - Confidence is `weighted_evidence_v1`. The model does not choose the percentage. One low-reliability source cannot score 100.
 - `GET /metrics` returns process counters. It does not include alert bodies or keys. Counts reset on restart. Tracing is off unless `SENTINEL_OTEL_EXPORTER=console`. See [docs/observability.md](docs/observability.md).
 - Offline evaluations: `python -m sentinel.evals run --output-dir <dir>`. See [docs/evaluations.md](docs/evaluations.md). This file does not copy the counts.
@@ -84,15 +84,13 @@ Unit tests use SQLite and do not need PostgreSQL or API keys. SQLite is not a su
 
 ### Docker Compose
 
-Compose starts the API and PostgreSQL 16 for local development. The database password in `docker-compose.yml` is for that local database only. `SENTINEL_DEMO_MODE` defaults to false inside Compose. Override it from the shell if you want the scripted demo model:
+Compose starts the API and PostgreSQL 16 for local development. The database password in `docker-compose.yml` is for that local database only. `SENTINEL_DEMO_MODE` defaults to true inside Compose so `docker compose up --build` is an offline demo. Override it from the shell only when LLM and provider keys are configured:
 
 ```bash
-SENTINEL_DEMO_MODE=true docker compose up --build
+docker compose up --build
 ```
 
 The API listens on `127.0.0.1:8091`. Postgres listens on `127.0.0.1:54329`. The API process runs `alembic upgrade head` before serving.
-
-Compose was not booted in the environment that captured the example below. Do not treat this repository as having a recorded Compose run.
 
 ## Example investigation
 
@@ -106,11 +104,19 @@ curl -sS -H 'Content-Type: application/json' \
 curl -sS -H 'Content-Type: application/json' \
   -d '{"alert_id":"demo-synthetic-203-0-113-44"}' \
   http://127.0.0.1:8091/investigations
+
+curl -sS -H 'Content-Type: application/json' \
+  --data-binary @examples/wazuh-synthetic-alert.json \
+  http://127.0.0.1:8091/alerts
+
+curl -sS -H 'Content-Type: application/json' \
+  -d '{"alert_id":"demo-wazuh-192-0-2-50"}' \
+  http://127.0.0.1:8091/investigations
 ```
 
-Run those with `SENTINEL_DEMO_MODE=true` and no API keys. On 2026-09-19T00:38:17Z that path returned HTTP 201. The investigation status is `AWAITING_REVIEW`. The stored report's classification is `INCONCLUSIVE`. The response body, indented and not rewritten, is [examples/investigation-response.json](examples/investigation-response.json). The terminal record is [examples/demo-transcript.txt](examples/demo-transcript.txt).
+Run those with `SENTINEL_DEMO_MODE=true` and no API keys, or use Compose which defaults that flag to true. On 2026-09-22T08:53:34Z `docker compose up --build` returned HTTP 201 for both examples. The generic JSON investigation status is `AWAITING_REVIEW`. Classification is `SUSPICIOUS` because the fixture IP and hash are labeled synthetic hits and `mock:` reliability is low. Confidence is 75 (`weighted_evidence_v1`). Approving the conclusion moved that investigation to `COMPLETE`. The Wazuh example classified `SUSPICIOUS` with confidence 55. The generic JSON body, indented and not rewritten, is [examples/investigation-response.json](examples/investigation-response.json). The terminal record is [examples/demo-transcript.txt](examples/demo-transcript.txt).
 
-The scripted planner called `lookup_ip`, `lookup_hash`, and `search_mitre`. IP and hash rows are labeled `mock:` and leave the verdict fields null. The MITRE query was `Password Guessing`, taken from the title by a fixed keyword table. The local subset returned `T1110.001`. That is a catalog hit, not a claim that a host was attacked. The narrative is the constant "Collected results are attached. Classification uses stored fields only."
+The scripted planner called `lookup_ip`, `lookup_hash`, and `search_mitre` on the generic example, and `lookup_ip` plus `search_mitre` on the Wazuh example. IP and hash rows are labeled `mock:`. The MITRE query was `Password Guessing`, taken from the title by a fixed keyword table. The local subset returned `T1110.001`. That is a catalog hit, not a claim that a host was attacked. The narrative is the constant "Collected results are attached. Classification uses stored fields only."
 
 ## Agent architecture
 
@@ -182,8 +188,8 @@ A jailbreak detector is not on this list. The intended control remains separatio
 ## Limitations
 
 - The demo path is a scripted planner plus labeled mocks. It is not a hosted model and it is not live threat intelligence.
-- Mock IP and hash results leave verdict fields null. Alerts that only have those indicators stay `INCONCLUSIVE` unless some other stored field supports a class. That is the pipeline, not a polished detection story.
-- `demo_mode` does not mock CVE, DNS, or MITRE. An alert with a domain will call the resolver. An alert with a CVE will call OSV unless a test injects a transport.
+- Fixture IPs and hashes may carry canned verdicts. `mock:` reliability is still `low`, so those hits classify `SUSPICIOUS` rather than `MALICIOUS`. Unlisted IPs stay unknown.
+- `demo_mode` mocks CVE and DNS. MITRE still reads the checked-in subset. An unlisted domain fails closed instead of calling the resolver.
 - The ATT&CK file is a 19-technique subset. A search miss means the technique is not in the subset.
 - Wazuh support is a normalizer for the documented JSON cited in `tests/wazuh_fixtures.py`. There is no client that talks to a Wazuh manager.
 - GuardDuty support is the same kind of limit: one documented finding object. Nothing queries GuardDuty for more, and the accepted body is that finding, not the event wrapper around it. See [examples/floci/README.md](examples/floci/README.md).

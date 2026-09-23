@@ -1,7 +1,8 @@
 """Sentinel Agent.
 
-The package validates alerts, stores them, and looks up indicators through a
-closed tool set. It does not run an investigation.
+The package validates alerts, runs a bounded investigation through a closed
+tool set, and stores a verified report for human review. It does not execute
+remediation.
 """
 
 from importlib.metadata import PackageNotFoundError, version

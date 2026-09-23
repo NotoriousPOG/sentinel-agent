@@ -91,7 +91,7 @@ def test_post_runs_and_get_reloads(client: TestClient, monkeypatch: pytest.Monke
             {
                 "action": "call_tool",
                 "tool": "lookup_ip",
-                "arguments": {"ip": "203.0.113.10"},
+                "arguments": {"ip": "203.0.113.98"},
             },
             {
                 "action": "call_tool",
@@ -131,9 +131,9 @@ def test_post_runs_and_get_reloads(client: TestClient, monkeypatch: pytest.Monke
     assert payload["contradictions"] == []
     assert len(payload["indicators"]) == 2
     linked = {item["value"]: item["evidence_ids"] for item in payload["indicators"]}
-    assert set(linked) == {"203.0.113.10", "203.0.113.11"}
+    assert set(linked) == {"203.0.113.98", "203.0.113.11"}
     by_ip = {item["result"]["ip"]: item["evidence_id"] for item in payload["evidence"]}
-    assert linked["203.0.113.10"] == [by_ip["203.0.113.10"]]
+    assert linked["203.0.113.98"] == [by_ip["203.0.113.98"]]
     assert linked["203.0.113.11"] == [by_ip["203.0.113.11"]]
     assert "result" not in payload["indicators"][0]
     assert "raw" not in payload["indicators"][0]
@@ -271,11 +271,14 @@ def test_demo_mode_completes_without_llm_settings(
     assert "virustotal" not in sources
     ip_row = next(item for item in body["evidence"] if item["tool"] == "lookup_ip")
     hash_row = next(item for item in body["evidence"] if item["tool"] == "lookup_hash")
-    assert ip_row["result"]["reported_malicious"] is None
-    assert hash_row["result"]["malicious_count"] is None
+    assert ip_row["result"]["reported_malicious"] is True
+    assert ip_row["result"]["raw"]["fixture"] is True
+    assert hash_row["result"]["malicious_count"] == 8
+    assert ip_row["reliability"] == "low"
+    assert hash_row["reliability"] == "low"
     report = client.get(f"/investigations/{body['investigation_id']}/report")
     assert report.status_code == 200
     document = report.json()
-    assert document["classification"] == "INCONCLUSIVE"
+    assert document["classification"] == "SUSPICIOUS"
     assert document["confidence"]["method"] == "weighted_evidence_v1"
     assert _count() == 1

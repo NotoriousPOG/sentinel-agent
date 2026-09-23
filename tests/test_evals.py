@@ -8,7 +8,7 @@ import pytest
 from sentinel.evals.cli import main
 from sentinel.evals.dataset import CaseKind, load_dataset
 from sentinel.evals.model import plan_tool_names
-from sentinel.evals.offline import INJECTED_CVE_ID, injected_osv_url
+from sentinel.evals.offline import INJECTED_CVE_ID
 from sentinel.evals.reports import render_markdown
 from sentinel.evals.runner import execute, schema_compliance_total
 from sentinel.services.llm_http import OpenAiCompatibleClient
@@ -98,11 +98,12 @@ def test_run_is_offline_and_schema_compliance_is_total(
     hash_case = next(case for case in report.cases if case.case_id == "malware-hash")
     assert any(provider.startswith("mock:") for provider in hash_case.providers)
 
-    assert report.transport_urls == [injected_osv_url()]
+    assert report.transport_urls == []
     cve_label = next(item for item in dataset.cases if item.case_id == "known-cve")
     assert cve_label.alert.cve == INJECTED_CVE_ID
     cve_case = next(case for case in report.cases if case.case_id == "known-cve")
-    assert "osv" in cve_case.providers
+    assert "mock:osv" in cve_case.providers
+    assert "osv" not in cve_case.providers
 
     exit_code = main(["run", "--output-dir", str(tmp_path)])
     assert exit_code == 0

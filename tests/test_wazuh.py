@@ -1,7 +1,9 @@
 """Wazuh normalization against documented alert JSON. No manager is contacted."""
 
 import copy
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from tests.wazuh_fixtures import wazuh_auditd_dynamic_fields_alert, wazuh_logtest_ssh_alert
@@ -149,3 +151,16 @@ def test_vendor_adapter_still_raises() -> None:
 
     with pytest.raises(NotImplementedCapability, match="not scheduled"):
         SplunkAdapter().normalize(wazuh_logtest_ssh_alert())
+
+
+def test_synthetic_wazuh_example_normalizes_documentation_address() -> None:
+    path = Path(__file__).resolve().parents[1] / "examples" / "wazuh-synthetic-alert.json"
+    body = json.loads(path.read_text(encoding="utf-8"))
+    assert body["source"] == "wazuh"
+    alert = WazuhAdapter().normalize(body["payload"])
+    assert alert.alert_id == "demo-wazuh-192-0-2-50"
+    assert str(alert.source_ip) == "192.0.2.50"
+    assert alert.process == "sshd"
+    assert "password guessing" in (alert.title or "").casefold()
+    assert alert.raw_event["full_log"].startswith("Sep 22")
+    assert "18.18.18.18" not in alert.raw_event["full_log"]

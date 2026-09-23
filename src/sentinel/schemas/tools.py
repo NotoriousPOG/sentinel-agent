@@ -45,7 +45,12 @@ class LookupIpInput(BaseModel):
 
 
 class LookupIpOutput(BaseModel):
-    """Provider answer for an IP. ``reported_malicious`` defaults to unknown, not false."""
+    """Provider answer for an IP. ``reported_malicious`` defaults to unknown, not false.
+
+    ``asn``, ``country``, and ``organization`` are copied from the provider when
+    present. They are not a reputation verdict. Vendor scores such as
+    AbuseIPDB ``abuseConfidenceScore`` stay on ``raw``.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -53,6 +58,9 @@ class LookupIpOutput(BaseModel):
     provider: str = Field(min_length=1, max_length=128)
     categories: list[str] = Field(default_factory=list, max_length=50)
     reported_malicious: bool | None = None
+    asn: str | None = Field(default=None, max_length=32)
+    country: str | None = Field(default=None, max_length=8)
+    organization: str | None = Field(default=None, max_length=256)
     reference_ids: list[ShortRef] = Field(default_factory=list, max_length=50)
     raw: dict[str, Any]
     retrieved_at: datetime

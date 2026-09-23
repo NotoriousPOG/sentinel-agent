@@ -6,9 +6,9 @@ The dataset is synthetic. `evals/dataset.json` says so, and the report header sa
 
 ## What is executed
 
-The runner builds the tool registry with `demo_mode` on. IP lookups use `MockIpIntelligence` (`mock:abuseipdb`). Hash lookups use `MockFileIntelligence` (`mock:virustotal`). Those labels mean the row is not live intelligence. `demo_mode` is not a fallback for a failed live call.
+The runner builds the tool registry with `demo_mode` on. IP, hash, CVE, and DNS lookups use mock providers (`mock:abuseipdb`, `mock:virustotal`, `mock:osv`, `mock:dns`). Those labels mean the row is not live intelligence. `demo_mode` is not a fallback for a failed live call.
 
-CVE lookup uses `OsvIntelligence` with an in-process transport. The only body that transport returns is a fixture for the public id `CVE-2021-44228`. It is not a download from OSV. Any other URL is refused before a socket is opened. Domain lookup uses a resolver that raises `ProviderError` and does not call `getaddrinfo`. MITRE search reads the checked-in Enterprise subset. Nothing in the run is downloaded.
+Listed fixture indicators in `src/sentinel/services/providers/fixtures.py` may carry canned verdicts. An unlisted IP or hash stays unknown. An unlisted domain raises `ProviderError`. MITRE search reads the checked-in Enterprise subset. An injected OSV transport and a failing resolver stay in the runner as a second offline guard. Nothing in the run is downloaded.
 
 The model is `ScriptedEvalModel` in `src/sentinel/evals/model.py`. It is not `OpenAiCompatibleClient`. It does not read dataset labels. It plans tools from indicator fields, in this order: source IP, destination IP, file hash, CVE, domain, then at most one `search_mitre` query. The query comes from the first match in a fixed keyword table against title, description, process, and command line. `raw_event`, `metadata`, usernames, and text inside the untrusted-data markers are not scanned. The report narrative is a constant. It does not name indicators.
 

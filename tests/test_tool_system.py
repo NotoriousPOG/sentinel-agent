@@ -202,22 +202,57 @@ def test_timeout_is_not_a_benign_result() -> None:
 
 def test_demo_mode_selects_mocks_without_calling_live_providers() -> None:
     transport = RecordingTransport(error=ProviderError("http", "timeout"))
-    registry, _, _, _ = _registry(demo_mode=True, abuse_key=KEY, vt_key=KEY, transport=transport)
-    ip = registry.call("lookup_ip", {"ip": "203.0.113.10"})
-    digest = registry.call("lookup_hash", {"file_hash": HASH, "algorithm": "sha256"})
+    registry, _, _, resolver = _registry(
+        demo_mode=True, abuse_key=KEY, vt_key=KEY, transport=transport
+    )
+    ip = registry.call("lookup_ip", {"ip": "203.0.113.99"})
+    digest = registry.call("lookup_hash", {"file_hash": "cd" * 32, "algorithm": "sha256"})
     assert ip.output.provider.startswith("mock:")
     assert digest.output.provider.startswith("mock:")
     assert ip.output.reported_malicious is None
     assert digest.output.malicious_count is None
+    assert digest.output.raw["fixture"] is False
     assert ip.output.raw["synthetic"] is True
+    assert ip.output.raw["fixture"] is False
     assert "not live intelligence" in str(ip.output.raw["label"])
     assert transport.calls == []
+    assert resolver.seen == []
     assert ip.reliability is EvidenceReliability.LOW
 
 
-def test_demo_mode_does_not_turn_a_failed_cve_lookup_into_a_mock() -> None:
+def test_demo_fixture_ip_is_labeled_synthetic_and_low_reliability() -> None:
+    registry, transport, _, _ = _registry(demo_mode=True)
+    result = registry.call("lookup_ip", {"ip": "203.0.113.44"})
+    assert result.output.provider == "mock:abuseipdb"
+    assert result.output.reported_malicious is True
+    assert result.output.raw["fixture"] is True
+    assert result.output.organization == "RFC 5737 documentation range"
+    assert result.reliability is EvidenceReliability.LOW
+    assert transport.calls == []
+
+
+def test_demo_mode_cve_and_dns_do_not_call_live_providers() -> None:
     transport = RecordingTransport(error=ProviderError("http", "timeout"))
-    registry, _, _, _ = _registry(demo_mode=True, transport=transport)
+    registry, _, _, resolver = _registry(demo_mode=True, transport=transport)
+    cve = registry.call("lookup_cve", {"cve_id": "CVE-2021-44228"})
+    assert cve.output.provider == "mock:osv"
+    assert cve.output.cvss_score is None
+    assert cve.output.raw["fixture"] is True
+    unknown = registry.call("lookup_cve", {"cve_id": "CVE-9999-0001"})
+    assert unknown.output.provider == "mock:osv"
+    assert unknown.output.description is None
+    assert unknown.output.raw["fixture"] is False
+    with pytest.raises(ProviderError) as exc:
+        registry.call("lookup_domain", {"domain": "missing.example"})
+    assert exc.value.provider == "mock:dns"
+    assert exc.value.reason == "resolution_failed"
+    assert transport.calls == []
+    assert resolver.seen == []
+
+
+def test_live_cve_timeout_is_not_replaced_with_a_mock() -> None:
+    transport = RecordingTransport(error=ProviderError("http", "timeout"))
+    registry, _, _, _ = _registry(demo_mode=False, transport=transport)
     with pytest.raises(ProviderError) as exc:
         registry.call("lookup_cve", {"cve_id": "CVE-9999-0001"})
     assert exc.value.provider == "osv"
@@ -260,6 +295,9 @@ def test_abuseipdb_does_not_invent_a_verdict_or_put_the_key_in_the_url(
             "ipAddress": "203.0.113.10",
             "abuseConfidenceScore": 0,
             "isWhitelisted": True,
+            "countryCode": "US",
+            "isp": "Documentation ISP",
+            "asn": 64512,
             "reports": [
                 {
                     "categories": [18],
@@ -275,6 +313,9 @@ def test_abuseipdb_does_not_invent_a_verdict_or_put_the_key_in_the_url(
         result = registry.call("lookup_ip", {"ip": "203.0.113.10"})
     assert result.output.reported_malicious is None
     assert result.output.categories == []
+    assert result.output.country == "US"
+    assert result.output.organization == "Documentation ISP"
+    assert result.output.asn == "AS64512"
     assert result.output.provider == "abuseipdb"
     assert result.reliability is EvidenceReliability.MEDIUM
     assert KEY not in result.model_dump_json()

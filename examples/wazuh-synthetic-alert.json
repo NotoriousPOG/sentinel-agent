@@ -1,0 +1,43 @@
+{
+  "source": "wazuh",
+  "payload": {
+    "timestamp": "2026-09-22T00:00:00.000000Z",
+    "rule": {
+      "level": 10,
+      "description": "sshd: password guessing from a documentation address (synthetic demo)",
+      "id": "5710",
+      "mitre": {
+        "id": ["T1110.001"],
+        "tactic": ["Credential Access"],
+        "technique": ["Password Guessing"]
+      },
+      "firedtimes": 1,
+      "mail": false,
+      "groups": ["syslog", "sshd", "authentication_failed"]
+    },
+    "agent": {
+      "id": "000",
+      "name": "lab-linux-01"
+    },
+    "manager": {
+      "name": "lab-manager"
+    },
+    "id": "demo-wazuh-192-0-2-50",
+    "full_log": "Sep 22 00:00:00 lab-linux-01 sshd[29205]: Invalid user demo from 192.0.2.50 port 48928",
+    "predecoder": {
+      "program_name": "sshd",
+      "timestamp": "Sep 22 00:00:00",
+      "hostname": "lab-linux-01"
+    },
+    "decoder": {
+      "parent": "sshd",
+      "name": "sshd"
+    },
+    "data": {
+      "srcip": "192.0.2.50",
+      "srcport": "48928",
+      "srcuser": "demo"
+    },
+    "location": "synthetic->/var/log/auth.log"
+  }
+}

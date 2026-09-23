@@ -1,37 +1,17 @@
-date: 2026-09-19T00:38:17Z
-host: http://127.0.0.1:8091
-SENTINEL_DEMO_MODE=true
-LLM, AbuseIPDB, and VirusTotal keys: unset
-database: sqlite+pysqlite:////tmp/sentinel-demo.db (migrated with alembic upgrade head)
-
-GET /health
-HTTP/1.1 200 OK
-{"status":"ok","service":"sentinel-agent","version":"0.1.0","demo_mode":true}
-
-POST /alerts
-body: examples/synthetic-alert.json
-HTTP/1.1 201 Created
-alert_id: demo-synthetic-203-0-113-44
-idempotent_replay: false
-
-POST /investigations
-body: {"alert_id":"demo-synthetic-203-0-113-44"}
-HTTP/1.1 201 Created
-investigation_id: 202870b281004ba6be7325984971c8f5
-status: AWAITING_REVIEW
-error: null
-tools: lookup_ip, lookup_hash, search_mitre
-sources: mitre-attack, mock:abuseipdb, mock:virustotal
-report.classification: INCONCLUSIVE
-
-GET /investigations/202870b281004ba6be7325984971c8f5/report
-HTTP/1.1 200 OK
-classification: INCONCLUSIVE
-confidence.method: weighted_evidence_v1
-confidence.score: 75
-mitre_attack: T1110.001
-lookup_ip.reported_malicious: null
-lookup_hash.malicious_count: null
-
-The response body is examples/investigation-response.json.
-Docker Compose was not started for this run.
+Captured 2026-09-22T08:53:34Z against http://127.0.0.1:8091 with docker compose.
+GET /health demo_mode=True
+generic investigation 434c783c72984f7ab9294c0882b45fdb status=AWAITING_REVIEW classification=SUSPICIOUS confidence=75
+tools=['lookup_ip', 'lookup_hash', 'search_mitre']
+review status=COMPLETE
+wazuh investigation 0f3916c4985f4a169411e11f714e992c status=AWAITING_REVIEW classification=SUSPICIOUS
+wazuh tools=['lookup_ip', 'search_mitre']
+mitre=['T1110.001']
+GET /health -> 200
+POST /alerts -> 201
+POST /investigations -> 201
+GET /investigations/434c783c72984f7ab9294c0882b45fdb/report -> 200
+POST /investigations/434c783c72984f7ab9294c0882b45fdb/review -> 200
+POST /alerts -> 201
+POST /investigations -> 201
+GET /investigations/0f3916c4985f4a169411e11f714e992c/report -> 200
+GET /investigations/434c783c72984f7ab9294c0882b45fdb -> 200

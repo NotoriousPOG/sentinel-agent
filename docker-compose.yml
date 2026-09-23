@@ -23,12 +23,25 @@ services:
       - "127.0.0.1:8091:8091"
     environment:
       SENTINEL_DATABASE_URL: postgresql+psycopg://sentinel:sentinel@postgres:5432/sentinel
-      # Default off. Override from the shell: SENTINEL_DEMO_MODE=true docker compose up --build
-      SENTINEL_DEMO_MODE: ${SENTINEL_DEMO_MODE:-false}
+      # Local Compose defaults to the scripted demo model and fixture mocks.
+      # Override: SENTINEL_DEMO_MODE=false docker compose up --build
+      SENTINEL_DEMO_MODE: ${SENTINEL_DEMO_MODE:-true}
       SENTINEL_LOG_LEVEL: INFO
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health')",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
 volumes:
   sentinel-pg:

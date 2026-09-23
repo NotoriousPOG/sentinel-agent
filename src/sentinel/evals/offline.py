@@ -1,8 +1,9 @@
 """In-process stand-ins so the eval runner does not open a socket.
 
-IP and hash lookups do not use this module. Those come from the ``demo_mode``
-mocks. CVE lookup uses ``OsvIntelligence`` with the transport below. Domain
-lookup uses the resolver below, which always fails.
+With ``demo_mode`` on, IP, hash, CVE, and DNS use mock providers. The
+transport and resolver below stay injected as a second offline guard: if
+``demo_mode`` is accidentally off, CVE still cannot download OSV and DNS
+still does not call ``getaddrinfo``.
 """
 
 from collections.abc import Mapping

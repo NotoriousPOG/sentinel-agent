@@ -1,6 +1,6 @@
 # Implementation plan
 
-Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 10. Milestones 1 and 2 are implemented. Milestone 3 is implemented for the criteria checked below. Milestone 4 is implemented for the criteria checked below. Milestone 5 is implemented for the criteria checked below. Milestone 6 is implemented for the criteria checked below. Milestone 7 is implemented for the criteria checked below. Milestone 8 is implemented for the criteria checked below. Milestones 9–10 are not started. Acceptance criteria are checks a reviewer can run or read, not slogans.
+Sentinel Agent is an open-source SOC investigation system. This plan is the contract for milestones 1 through 11. Milestones 1 through 10 are implemented for the criteria checked in each section. Milestone 11 is the offline-complete demo path. Acceptance criteria are checks a reviewer can run or read, not slogans.
 
 ## Extra: local Floci demo
 
@@ -39,7 +39,7 @@ src/sentinel/
   models/              SQLAlchemy models for alerts and investigations
   schemas/             Pydantic domain models
   tools/               closed registry and the five tools
-  services/            source adapters, LLM port, threat-intel clients
+  services/            source adapters, LLM port, threat-intel clients, demo fixtures
   storage/             engine and session factory
   observability/       correlation ids, process metrics, default-off tracing
   security/            untrusted-field registry (not a detector)
@@ -341,6 +341,28 @@ Not done, and not claimed:
 
 - Compose was not started here, so this branch has no recorded Compose log.
 - No jailbreak detector and no denylist. The injection tests still use a fake model that follows the payload.
+- No remediation executor, including a stub.
+- Provider backoff, Redis, pgvector, and the OpenAI SDK are still absent.
+- CI does not fail on a classification agreement threshold.
+
+### 11. Offline-complete demo fixtures
+
+Status: done for the criteria below.
+
+Fixture-backed `demo_mode`, Compose default, Wazuh example, CVE/DNS mocks.
+
+Acceptance:
+
+- [x] `docker compose up --build` defaults `SENTINEL_DEMO_MODE` to true. No paid key is required for that path.
+- [x] `demo_mode` selects `mock:abuseipdb`, `mock:virustotal`, `mock:osv`, and `mock:dns`. MITRE still reads the checked-in subset. A live failure is not caught and replaced with a mock.
+- [x] Listed fixture indicators may carry canned verdicts. Unknown IPs and hashes stay null. Unknown domains fail closed. `mock:` reliability stays `low`.
+- [x] `examples/wazuh-synthetic-alert.json` is a documented Wazuh-shaped synthetic alert using `192.0.2.50`.
+- [x] A Compose run of the generic JSON example was captured on 2026-09-22. Classification `SUSPICIOUS`. Review reached `COMPLETE`. The Wazuh example classified `SUSPICIOUS`.
+- [x] `verify_report` and `weighted_evidence_v1` were not changed. Eval counts are not pasted into the README.
+
+Not done, and not claimed:
+
+- No jailbreak detector and no denylist.
 - No remediation executor, including a stub.
 - Provider backoff, Redis, pgvector, and the OpenAI SDK are still absent.
 - CI does not fail on a classification agreement threshold.

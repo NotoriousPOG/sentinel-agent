@@ -6,9 +6,11 @@ from sentinel.evals.results import Count, EvalReport
 
 _HEADER = (
     "Synthetic dataset. These cases are not live alerts. "
-    "demo_mode IP and hash rows are labeled mock: and are not live intelligence. "
+    "demo_mode rows are labeled mock: and are not live intelligence. "
+    "Listed fixture indicators may carry canned verdicts; unknown IPs stay null. "
     "The conflicting-intelligence case uses synthetic evidence rows, not a second vendor. "
-    "The CVE body is an injected OSV transport response, not a download. "
+    "CVE and DNS in this run use mock providers. An injected transport remains as a "
+    "second offline guard and is not an OSV download. "
     "The model is scripted-eval, in process. It is not a hosted model. "
     "A number below is a count from this run. It is not a detection rate, "
     "not a jailbreak resistance percentage, not a hallucination percentage, "

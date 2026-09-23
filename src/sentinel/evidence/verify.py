@@ -32,7 +32,18 @@ from sentinel.tools.policy import reliability_for_provider
 
 # Fields a fact may cite. ``raw`` is intentionally absent. Reliability is not here.
 _STORED_FIELDS: dict[str, frozenset[str]] = {
-    "lookup_ip": frozenset({"ip", "provider", "categories", "reported_malicious", "reference_ids"}),
+    "lookup_ip": frozenset(
+        {
+            "ip",
+            "provider",
+            "categories",
+            "reported_malicious",
+            "asn",
+            "country",
+            "organization",
+            "reference_ids",
+        }
+    ),
     "lookup_hash": frozenset(
         {
             "file_hash",
