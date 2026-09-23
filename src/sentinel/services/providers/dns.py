@@ -9,7 +9,7 @@ from typing import Protocol
 from sentinel.errors import ProviderError
 from sentinel.schemas.tools import LookupDomainInput, LookupDomainOutput
 from sentinel.services.clock import Clock
-from sentinel.services.providers.common import log_failure, log_ok
+from sentinel.services.providers.common import log_failure, log_ok, pause
 
 GetAddrInfo = Callable[[str, int | None], list[tuple[object, ...]]]
 
@@ -76,20 +76,17 @@ class DnsIntelligence:
         resolver: DomainResolver,
         clock: Clock,
         timeout_seconds: float,
+        max_attempts: int = 1,
+        backoff_seconds: float = 0.0,
     ) -> None:
         self._resolver = resolver
         self._clock = clock
         self._timeout = timeout_seconds
+        self._attempts = max(1, max_attempts)
+        self._backoff = backoff_seconds
 
     def lookup_domain(self, query: LookupDomainInput) -> LookupDomainOutput:
-        try:
-            addresses = self._resolver.resolve(query.domain, timeout_seconds=self._timeout)
-        except TimeoutError:
-            log_failure(self.name, "timeout")
-            raise ProviderError(self.name, "timeout") from None
-        except ProviderError as exc:
-            log_failure(self.name, exc.reason)
-            raise
+        addresses = self._resolve(query.domain)
         ips = _ip_addresses(addresses)
         if not ips:
             log_failure(self.name, "resolution_failed")
@@ -103,6 +100,25 @@ class DnsIntelligence:
             raw={"status": "resolved"},
             retrieved_at=self._clock.now(),
         )
+
+    def _resolve(self, domain: str) -> list[str]:
+        """Retry a timeout. A resolution failure is not a timeout and is not retried."""
+        for attempt in range(self._attempts):
+            try:
+                return self._resolver.resolve(domain, timeout_seconds=self._timeout)
+            except TimeoutError:
+                reason = "timeout"
+            except ProviderError as exc:
+                reason = exc.reason
+                if reason != "timeout" or attempt + 1 == self._attempts:
+                    log_failure(self.name, reason)
+                    raise
+            if attempt + 1 == self._attempts:
+                log_failure(self.name, reason)
+                raise ProviderError(self.name, reason)
+            pause(self._backoff, attempt)
+        log_failure(self.name, "timeout")
+        raise ProviderError(self.name, "timeout")
 
 
 def _ip_addresses(values: list[str]) -> list[str]:

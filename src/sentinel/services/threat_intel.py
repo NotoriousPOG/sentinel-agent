@@ -51,7 +51,7 @@ class MitreCatalog(Protocol):
     name: str
 
     def search_mitre(self, query: SearchMitreInput) -> SearchMitreOutput:
-        """Search the vendored ATT&CK subset. This does not download a bundle."""
+        """Search the vendored ATT&CK extract. This does not download a bundle."""
         ...
 
 

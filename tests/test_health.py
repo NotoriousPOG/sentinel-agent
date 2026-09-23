@@ -7,6 +7,33 @@ from sentinel import __version__
 from sentinel.config.settings import get_settings
 
 
+def test_ready_checks_the_database(client: TestClient) -> None:
+    response = client.get("/ready")
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "service": "sentinel-agent",
+        "database": "ok",
+    }
+
+
+def test_ready_failure_does_not_echo_the_database_url(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.orm import Session
+
+    def explode(*_args: object, **_kwargs: object) -> None:
+        raise OperationalError("SELECT 1", {}, Exception("password=super-secret-db"))
+
+    monkeypatch.setattr(Session, "execute", explode)
+    response = client.get("/ready")
+    assert response.status_code == 503
+    assert response.json()["database"] == "unavailable"
+    assert "super-secret-db" not in response.text
+    assert "password" not in response.text
+
+
 def test_health(client: TestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
@@ -31,6 +58,7 @@ def test_openapi_lists_product_routes(client: TestClient) -> None:
         "/investigations/{id}/report",
         "/investigations/{id}/review",
         "/metrics",
+        "/ready",
     }
     assert expected <= set(paths)
 

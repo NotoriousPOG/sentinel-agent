@@ -51,7 +51,7 @@ What the code does today:
 - `GET /investigations/{id}`, `/evidence`, and `/report` reload stored state. Evidence keeps one row per provider. The report route returns 404 `report_not_found` when verification has not accepted a report.
 - `POST /investigations/{id}/review` stores an `AnalystReview`. Notes are required. Approving the conclusion is the only path to `COMPLETE`. Approving remediation does not run an action.
 - Tools: `lookup_ip`, `lookup_hash`, `lookup_cve`, `search_mitre`, `lookup_domain`. Unknown names are refused. There is no shell and no URL-fetch tool.
-- AbuseIPDB and VirusTotal run only when their keys are set and `demo_mode` is off. CVE uses OSV when the flag is off. MITRE search reads a checked-in Enterprise ATT&CK 19.2 subset. DNS uses a resolver when the flag is off and does not HTTP-fetch the name. `demo_mode` selects labeled mocks for IP, hash, CVE, and DNS.
+- AbuseIPDB and VirusTotal run only when their keys are set and `demo_mode` is off. CVE uses OSV when the flag is off. MITRE search reads the checked-in Enterprise ATT&CK 19.2 extract. DNS uses a resolver when the flag is off and does not HTTP-fetch the name. `demo_mode` selects labeled mocks for IP, hash, CVE, and DNS. Transient provider failures are retried. `GET /ready` checks the database.
 - Confidence is `weighted_evidence_v1`. The model does not choose the percentage. One low-reliability source cannot score 100.
 - `GET /metrics` returns process counters. It does not include alert bodies or keys. Counts reset on restart. Tracing is off unless `SENTINEL_OTEL_EXPORTER=console`. See [docs/observability.md](docs/observability.md).
 - Offline evaluations: `python -m sentinel.evals run --output-dir <dir>`. See [docs/evaluations.md](docs/evaluations.md). This file does not copy the counts.
@@ -176,21 +176,21 @@ Add a `ToolName`, typed input and output models, a class whose `name` matches, a
 
 ## Roadmap
 
-Not in this repository, and not started:
+Still not in this repository:
 
-- Source adapters for CrowdStrike, Defender, Elastic, and Splunk. The classes exist and raise. GuardDuty has a minimal mapper for one documented finding shape, described in [examples/floci/README.md](examples/floci/README.md). That is not a GuardDuty integration.
-- A separate process that could apply a remediation action only after a stored review approves that action id. This tree does not contain that process.
-- Provider backoff, a readiness check that touches PostgreSQL, and the rest of the Enterprise ATT&CK catalog.
+- A process that applies a remediation action after a stored review. Approving a recommendation stores the decision. Nothing isolates a host, blocks an address, or deletes a file.
 - A job queue, a search over similar past alerts, and a graph library. Process counters stay in this process. Model calls do not use OpenAI's own client library. The reasons they were left out are in [docs/architecture.md](docs/architecture.md).
 
 A jailbreak detector is not on this list. The intended control remains separation and the closed tool set.
+
+CrowdStrike, Defender, Elastic, and Splunk each have a mapper for one documented object. They do not call those products. GuardDuty is the same kind of mapper, described in [examples/floci/README.md](examples/floci/README.md). `GET /ready` checks PostgreSQL. Transient provider calls are retried. The ATT&CK extract is the non-revoked Enterprise 19.2 set.
 
 ## Limitations
 
 - The demo path is a scripted planner plus labeled mocks. It is not a hosted model and it is not live threat intelligence.
 - Fixture IPs and hashes may carry canned verdicts. `mock:` reliability is still `low`, so those hits classify `SUSPICIOUS` rather than `MALICIOUS`. Unlisted IPs stay unknown.
 - `demo_mode` mocks CVE and DNS. MITRE still reads the checked-in subset. An unlisted domain fails closed instead of calling the resolver.
-- The ATT&CK file is a 19-technique subset. A search miss means the technique is not in the subset.
+- The ATT&CK file is the non-revoked, non-deprecated Enterprise 19.2 extract. A search miss means the technique is not in that extract.
 - Wazuh support is a normalizer for the documented JSON cited in `tests/wazuh_fixtures.py`. There is no client that talks to a Wazuh manager.
 - GuardDuty support is the same kind of limit: one documented finding object. Nothing queries GuardDuty for more, and the accepted body is that finding, not the event wrapper around it. See [examples/floci/README.md](examples/floci/README.md).
 - The API is synchronous. One investigation runs inside the request. There is no queue.

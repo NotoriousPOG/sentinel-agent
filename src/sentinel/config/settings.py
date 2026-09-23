@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     abuseipdb_api_key: SecretStr | None = None
     virustotal_api_key: SecretStr | None = None
     provider_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    provider_max_attempts: int = Field(default=3, ge=1, le=5)
+    provider_backoff_seconds: float = Field(default=0.2, ge=0, le=2)
 
     max_tool_calls: int = Field(default=8, ge=1, le=32)
     max_retries: int = Field(default=2, ge=0, le=5)

@@ -30,10 +30,14 @@ class OsvIntelligence:
         transport: HttpTransport,
         clock: Clock,
         timeout_seconds: float,
+        max_attempts: int = 1,
+        backoff_seconds: float = 0.0,
     ) -> None:
         self._transport = transport
         self._clock = clock
         self._timeout = timeout_seconds
+        self._attempts = max_attempts
+        self._backoff = backoff_seconds
 
     def lookup_cve(self, query: LookupCveInput) -> LookupCveOutput:
         if not CVE_RE.fullmatch(query.cve_id):
@@ -48,6 +52,8 @@ class OsvIntelligence:
             params=None,
             timeout_seconds=self._timeout,
             secret=None,
+            max_attempts=self._attempts,
+            backoff_seconds=self._backoff,
         )
         if not isinstance(body.get("id"), str):
             log_failure(self.name, "invalid_response")

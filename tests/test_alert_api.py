@@ -52,7 +52,7 @@ def test_missing_alert_uses_a_stable_code(client: TestClient) -> None:
 
 
 def test_unknown_source_and_missing_rule_use_stable_codes(client: TestClient) -> None:
-    unknown = client.post("/alerts", json={"source": "splunk", "payload": {}})
+    unknown = client.post("/alerts", json={"source": "qradar", "payload": {}})
     assert unknown.status_code == 422
     assert unknown.json()["errors"] == [{"code": "unknown_source", "field": "source"}]
     _assert_no_echoed_input(unknown.json())

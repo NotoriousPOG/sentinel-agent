@@ -167,7 +167,7 @@ class MitreTechniqueResult(BaseModel):
     technique_id: str
     name: str = Field(min_length=1, max_length=256)
     tactic: str = Field(min_length=1, max_length=128)
-    description: str = Field(min_length=1, max_length=4000)
+    description: str = Field(min_length=1, max_length=8000)
 
     @field_validator("technique_id")
     @classmethod

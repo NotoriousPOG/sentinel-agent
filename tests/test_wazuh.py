@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from tests.wazuh_fixtures import wazuh_auditd_dynamic_fields_alert, wazuh_logtest_ssh_alert
 
-from sentinel.errors import AlertValidationError, NotImplementedCapability
+from sentinel.errors import AlertValidationError
 from sentinel.schemas.alerts import AlertSeverity, NormalizedAlert
 from sentinel.schemas.errors import ValidationCode
 from sentinel.services.sources import WazuhAdapter
@@ -146,10 +146,10 @@ def test_copying_the_fixture_does_not_mutate_the_file_copy() -> None:
     assert copy.deepcopy(first)["id"] == "1682430643.3725"
 
 
-def test_vendor_adapter_still_raises() -> None:
+def test_splunk_adapter_rejects_a_wazuh_document() -> None:
     from sentinel.services.sources import SplunkAdapter
 
-    with pytest.raises(NotImplementedCapability, match="not scheduled"):
+    with pytest.raises(AlertValidationError):
         SplunkAdapter().normalize(wazuh_logtest_ssh_alert())
 
 

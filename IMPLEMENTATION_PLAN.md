@@ -364,8 +364,29 @@ Not done, and not claimed:
 
 - No jailbreak detector and no denylist.
 - No remediation executor, including a stub.
-- Provider backoff, Redis, pgvector, and the OpenAI SDK are still absent.
+- Redis, pgvector, and the OpenAI SDK are still absent.
 - CI does not fail on a classification agreement threshold.
+
+### 12. Roadmap remainder that does not add a queue or an executor
+
+Status: done for the criteria below.
+
+Provider backoff, database readiness, the Enterprise ATT&CK extract, and documented mappers for CrowdStrike, Defender, Elastic, and Splunk.
+
+Acceptance:
+
+- [x] Transient HTTP failures and DNS timeouts are retried up to `SENTINEL_PROVIDER_MAX_ATTEMPTS`. A 404 is not retried. The last failure is still `ProviderError`, not a benign result.
+- [x] `GET /ready` runs `SELECT 1`. A database error is HTTP 503 and does not include the database URL.
+- [x] `GET /health` still does not touch the database.
+- [x] The checked-in ATT&CK file is the non-revoked, non-deprecated Enterprise 19.2 extract, retrieved 2026-09-22. Search does not download it.
+- [x] CrowdStrike, Defender, Elastic, and Splunk map one documented object each. They do not call those products. A missing required field fails closed.
+
+Not done, and not claimed:
+
+- No remediation process. Approving a recommendation still stores the decision and runs nothing.
+- No job queue, no similar-alert search, and no graph library.
+- No jailbreak detector.
+- These mappers are not product integrations. Wazuh still has no manager client.
 
 Definition of done for the finished product, not for this branch: a reviewer clones the repo, runs it locally without paid API keys, submits a synthetic alert, watches an investigation, inspects tools, evidence, MITRE mapping, the report, and the confidence breakdown, records a review, and runs evals and tests.
 

@@ -5,9 +5,9 @@ keys are kept on ``raw_event`` or ``metadata`` and are not first-class fields.
 
 ``WazuhAdapter`` maps Wazuh's documented alert JSON. It does not call a manager.
 
-``GuardDutyAdapter`` maps one documented GuardDuty finding object. It does
-not call AWS. That mapper is not a full GuardDuty integration. The other
-vendor products below are importable interfaces and do not parse payloads.
+``GuardDutyAdapter``, ``CrowdStrikeFalconAdapter``, ``DefenderAdapter``,
+``ElasticAdapter``, and ``SplunkAdapter`` each map one documented object.
+None of them call the vendor. They are not product integrations.
 """
 
 import copy
@@ -16,9 +16,13 @@ from typing import Any, Protocol
 
 from pydantic import ValidationError
 
-from sentinel.errors import AlertValidationError, NotImplementedCapability
+from sentinel.errors import AlertValidationError
 from sentinel.schemas.alerts import NormalizedAlert
+from sentinel.services.crowdstrike import normalize_crowdstrike
+from sentinel.services.defender import normalize_defender
+from sentinel.services.elastic_alert import normalize_elastic
 from sentinel.services.guardduty import normalize_guardduty
+from sentinel.services.splunk import normalize_splunk
 from sentinel.services.validation import issues_from_validation
 from sentinel.services.wazuh import normalize_wazuh
 
@@ -77,24 +81,16 @@ class WazuhAdapter:
         return normalize_wazuh(payload)
 
 
-class _UnimplementedVendorAdapter:
-    name: str
-    product: str
-    implemented = False
-
-    def normalize(self, payload: object) -> NormalizedAlert:
-        _ = payload
-        raise NotImplementedCapability(
-            f"{self.product} source adapter",
-            milestone=None,
-        )
-
-
-class CrowdStrikeFalconAdapter(_UnimplementedVendorAdapter):
-    """UNIMPLEMENTED interface. Not a CrowdStrike integration."""
+class CrowdStrikeFalconAdapter:
+    """Map one detection summary. Not a CrowdStrike API client."""
 
     name = "crowdstrike_falcon"
-    product = "CrowdStrike Falcon"
+    implemented = True
+
+    def normalize(self, payload: object) -> NormalizedAlert:
+        if not isinstance(payload, Mapping):
+            raise TypeError("CrowdStrike detection must be a JSON object")
+        return normalize_crowdstrike(payload)
 
 
 class GuardDutyAdapter:
@@ -102,7 +98,6 @@ class GuardDutyAdapter:
 
     The payload is the GetFindings finding, not an EventBridge envelope and
     not a detector listing. Missing required finding fields fail closed.
-    CrowdStrike, Defender, Elastic, and Splunk are still unimplemented.
     """
 
     name = "aws_guardduty"
@@ -114,25 +109,40 @@ class GuardDutyAdapter:
         return normalize_guardduty(payload)
 
 
-class DefenderAdapter(_UnimplementedVendorAdapter):
-    """UNIMPLEMENTED interface. Not a Microsoft Defender integration."""
+class DefenderAdapter:
+    """Map one Defender for Endpoint alert. Not a Microsoft API client."""
 
     name = "microsoft_defender"
-    product = "Microsoft Defender"
+    implemented = True
+
+    def normalize(self, payload: object) -> NormalizedAlert:
+        if not isinstance(payload, Mapping):
+            raise TypeError("Defender alert must be a JSON object")
+        return normalize_defender(payload)
 
 
-class ElasticAdapter(_UnimplementedVendorAdapter):
-    """UNIMPLEMENTED interface. Not an Elastic integration."""
+class ElasticAdapter:
+    """Map one Elastic Security alert hit. Not an Elasticsearch client."""
 
     name = "elastic"
-    product = "Elastic"
+    implemented = True
+
+    def normalize(self, payload: object) -> NormalizedAlert:
+        if not isinstance(payload, Mapping):
+            raise TypeError("Elastic alert must be a JSON object")
+        return normalize_elastic(payload)
 
 
-class SplunkAdapter(_UnimplementedVendorAdapter):
-    """UNIMPLEMENTED interface. Not a Splunk integration."""
+class SplunkAdapter:
+    """Map one Splunk notable event. Not a Splunk search client."""
 
     name = "splunk"
-    product = "Splunk"
+    implemented = True
+
+    def normalize(self, payload: object) -> NormalizedAlert:
+        if not isinstance(payload, Mapping):
+            raise TypeError("Splunk notable must be a JSON object")
+        return normalize_splunk(payload)
 
 
 def iter_source_adapters() -> tuple[SourceAdapter, ...]:

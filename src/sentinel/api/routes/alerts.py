@@ -18,9 +18,13 @@ from sentinel.schemas.alerts import NormalizedAlert
 from sentinel.schemas.errors import ValidationCode
 from sentinel.schemas.ingest import AlertIngestRequest, AlertIngestResponse, StoredAlert
 from sentinel.services.sources import (
+    CrowdStrikeFalconAdapter,
+    DefenderAdapter,
+    ElasticAdapter,
     GenericJsonAdapter,
     GuardDutyAdapter,
     SourceAdapter,
+    SplunkAdapter,
     WazuhAdapter,
 )
 from sentinel.storage.alerts import AlertRepository, aware_utc
@@ -31,6 +35,10 @@ _ADAPTERS: dict[str, SourceAdapter] = {
     GenericJsonAdapter.name: GenericJsonAdapter(),
     WazuhAdapter.name: WazuhAdapter(),
     GuardDutyAdapter.name: GuardDutyAdapter(),
+    CrowdStrikeFalconAdapter.name: CrowdStrikeFalconAdapter(),
+    DefenderAdapter.name: DefenderAdapter(),
+    ElasticAdapter.name: ElasticAdapter(),
+    SplunkAdapter.name: SplunkAdapter(),
 }
 
 

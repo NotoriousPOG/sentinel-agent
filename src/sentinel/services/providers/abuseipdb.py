@@ -29,11 +29,15 @@ class AbuseIpdbIntelligence:
         transport: HttpTransport,
         clock: Clock,
         timeout_seconds: float,
+        max_attempts: int = 1,
+        backoff_seconds: float = 0.0,
     ) -> None:
         self._api_key = api_key
         self._transport = transport
         self._clock = clock
         self._timeout = timeout_seconds
+        self._attempts = max_attempts
+        self._backoff = backoff_seconds
 
     def lookup_ip(self, query: LookupIpInput) -> LookupIpOutput:
         secret = require_api_key(self.name, self._api_key)
@@ -46,6 +50,8 @@ class AbuseIpdbIntelligence:
             params={"ipAddress": str(query.ip)},
             timeout_seconds=self._timeout,
             secret=secret,
+            max_attempts=self._attempts,
+            backoff_seconds=self._backoff,
         )
         data = body.get("data")
         if not isinstance(data, dict):

@@ -9,7 +9,7 @@ from examples.floci.synthetic_guardduty_finding import (
 )
 from fastapi.testclient import TestClient
 
-from sentinel.errors import AlertValidationError, NotImplementedCapability
+from sentinel.errors import AlertValidationError
 from sentinel.schemas.alerts import AlertSeverity
 from sentinel.schemas.errors import ValidationCode
 from sentinel.services.guardduty import severity_from_guardduty
@@ -148,8 +148,8 @@ def test_non_object_payload_is_rejected() -> None:
         GuardDutyAdapter().normalize(["not", "a", "finding"])
 
 
-def test_other_vendors_still_raise() -> None:
-    with pytest.raises(NotImplementedCapability, match="not scheduled"):
+def test_a_guardduty_finding_is_not_a_crowdstrike_detection() -> None:
+    with pytest.raises(AlertValidationError):
         CrowdStrikeFalconAdapter().normalize(synthetic_guardduty_finding())
 
 

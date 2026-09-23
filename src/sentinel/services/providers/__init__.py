@@ -52,22 +52,30 @@ def build_providers(
             transport=transport,
             clock=clock,
             timeout_seconds=settings.provider_timeout_seconds,
+            max_attempts=settings.provider_max_attempts,
+            backoff_seconds=settings.provider_backoff_seconds,
         )
         file_intel = VirusTotalIntelligence(
             api_key=settings.virustotal_api_key,
             transport=transport,
             clock=clock,
             timeout_seconds=settings.provider_timeout_seconds,
+            max_attempts=settings.provider_max_attempts,
+            backoff_seconds=settings.provider_backoff_seconds,
         )
         cve = OsvIntelligence(
             transport=transport,
             clock=clock,
             timeout_seconds=settings.provider_timeout_seconds,
+            max_attempts=settings.provider_max_attempts,
+            backoff_seconds=settings.provider_backoff_seconds,
         )
         domain = DnsIntelligence(
             resolver=resolver,
             clock=clock,
             timeout_seconds=settings.provider_timeout_seconds,
+            max_attempts=settings.provider_max_attempts,
+            backoff_seconds=settings.provider_backoff_seconds,
         )
     return ProviderSet(
         ip=ip,

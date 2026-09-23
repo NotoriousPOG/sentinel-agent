@@ -130,6 +130,7 @@ def _registry(
         abuseipdb_api_key=None if abuse_key is None else SecretStr(abuse_key),
         virustotal_api_key=None if vt_key is None else SecretStr(vt_key),
         provider_timeout_seconds=timeout,
+        provider_backoff_seconds=0,
     )
     registry = build_registry(
         settings,
@@ -248,6 +249,25 @@ def test_demo_mode_cve_and_dns_do_not_call_live_providers() -> None:
     assert exc.value.reason == "resolution_failed"
     assert transport.calls == []
     assert resolver.seen == []
+
+
+def test_transient_timeout_is_retried_and_still_fails() -> None:
+    transport = RecordingTransport(error=ProviderError("http", "timeout"))
+    registry, _, _, _ = _registry(transport=transport)
+    with pytest.raises(ProviderError) as exc:
+        registry.call("lookup_cve", {"cve_id": "CVE-9999-0001"})
+    assert exc.value.provider == "osv"
+    assert exc.value.reason == "timeout"
+    assert len(transport.calls) == 3
+
+
+def test_http_404_is_not_retried() -> None:
+    transport = RecordingTransport(status_code=404, body=None)
+    registry, _, _, _ = _registry(transport=transport)
+    with pytest.raises(ProviderError) as exc:
+        registry.call("lookup_cve", {"cve_id": "CVE-9999-0001"})
+    assert exc.value.reason == "http_404"
+    assert len(transport.calls) == 1
 
 
 def test_live_cve_timeout_is_not_replaced_with_a_mock() -> None:
@@ -397,10 +417,11 @@ def test_mitre_search_uses_the_vendored_bundle_offline() -> None:
     document = bundle_document()
     assert document["attack_version"] == ATTACK_VERSION == "19.2"
     assert document["source_url"] == SOURCE_URL
-    assert document["retrieved_on"] == "2026-09-18"
+    assert document["retrieved_on"] == "2026-09-22"
+    assert len(document["techniques"]) >= 600
     transport = RecordingTransport(error=AssertionError("mitre must not use HTTP"))
     registry, _, _, resolver = _registry(transport=transport)
-    result = registry.call("search_mitre", {"query": "PowerShell"})
+    result = registry.call("search_mitre", {"query": "PowerShell", "technique_id": "T1059.001"})
     ids = {item.technique_id: item for item in result.output.techniques}
     assert "T1059.001" in ids
     assert ids["T1059.001"].name == "PowerShell"
@@ -409,7 +430,7 @@ def test_mitre_search_uses_the_vendored_bundle_offline() -> None:
     assert result.reliability is EvidenceReliability.HIGH
     evidence = result.evidence()
     assert evidence.source == "mitre-attack"
-    assert evidence.query == {"query": "PowerShell", "technique_id": None}
+    assert evidence.query == {"query": "PowerShell", "technique_id": "T1059.001"}
     exact = registry.call("search_mitre", {"query": "T1110", "technique_id": "T1110"})
     assert [item.technique_id for item in exact.output.techniques] == ["T1110"]
     assert exact.output.techniques[0].name == "Brute Force"

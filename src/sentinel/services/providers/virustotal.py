@@ -31,11 +31,15 @@ class VirusTotalIntelligence:
         transport: HttpTransport,
         clock: Clock,
         timeout_seconds: float,
+        max_attempts: int = 1,
+        backoff_seconds: float = 0.0,
     ) -> None:
         self._api_key = api_key
         self._transport = transport
         self._clock = clock
         self._timeout = timeout_seconds
+        self._attempts = max_attempts
+        self._backoff = backoff_seconds
 
     def lookup_hash(self, query: LookupHashInput) -> LookupHashOutput:
         secret = require_api_key(self.name, self._api_key)
@@ -51,6 +55,8 @@ class VirusTotalIntelligence:
             params=None,
             timeout_seconds=self._timeout,
             secret=secret,
+            max_attempts=self._attempts,
+            backoff_seconds=self._backoff,
         )
         stats = _stats(body)
         if stats is None:

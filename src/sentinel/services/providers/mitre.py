@@ -1,9 +1,9 @@
 """Local Enterprise ATT&CK search.
 
 Source, version, and retrieval date: ``src/sentinel/data/attack/README.md``.
-The bundle is the Enterprise ATT&CK v19.2 STIX collection
-(https://github.com/mitre-attack/attack-stix-data/releases/tag/v19.2),
-retrieved 2026-09-18. This module does not download it.
+The file is the non-revoked, non-deprecated Enterprise ATT&CK v19.2 technique
+extract (https://github.com/mitre-attack/attack-stix-data/releases/tag/v19.2),
+retrieved 2026-09-22. This module does not download it.
 """
 
 import json
@@ -25,6 +25,9 @@ SOURCE_URL = (
     "master/enterprise-attack/enterprise-attack-19.2.json"
 )
 _BUNDLE = "data/attack/enterprise-techniques.json"
+# Tool results excerpt long descriptions so one broad query cannot exhaust the
+# token budget. ``official_technique`` still returns the catalog text.
+_EXCERPT = 280
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +54,7 @@ class MitreAttackCatalog:
             ).casefold()
             if needle not in haystack:
                 continue
-            matches.append(item)
+            matches.append(_excerpt(item))
             if len(matches) >= 50:
                 break
         return SearchMitreOutput(
@@ -102,6 +105,13 @@ def technique_ids_in_result(result: Mapping[str, Any]) -> frozenset[str]:
         except ValueError:
             continue
     return frozenset(found)
+
+
+def _excerpt(item: MitreTechniqueResult) -> MitreTechniqueResult:
+    if len(item.description) <= _EXCERPT:
+        return item
+    shortened = item.description[: _EXCERPT - 3].rstrip() + "..."
+    return item.model_copy(update={"description": shortened})
 
 
 def _record(item: object) -> MitreTechniqueResult:
